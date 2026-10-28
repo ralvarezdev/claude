@@ -28,3 +28,11 @@ no el código: aquí no hay build ni tests, y una afirmación sin medición no v
 ```bash
 python3 ~/.config/rsk/cache/registry/docs-architect/1.0.0/scripts/docs_lint.py docs
 ```
+
+## Versiones
+
+- Un release es un tag anotado y firmado `vX.Y.Z` sobre un commit limpio.
+- Cada release lleva su entrada en `CHANGELOG.md`. Un cambio que altera lo que
+  `task install` escribe, o lo que `task audit` reporta, la necesita.
+- Un tag publicado no se mueve: si está mal, se hace otro release.
+- `git push` y el push de tags siguen siendo del dueño.
