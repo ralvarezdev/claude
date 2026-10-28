@@ -10,6 +10,14 @@ the tooling that applies it. Anything that changes what `task install` writes to
 
 ## [Unreleased]
 
+### Fixed
+
+- The per-turn figures quoted in 0.3.0 used the 5-minute write price ($2.50/M).
+  The main conversation writes with the 1h TTL, so the right price is $4.00/M and
+  the numbers are one cent higher: 200k $0.04, 400k $0.06, 600k $0.08, 800k
+  $0.10, with rebuilds at $1.01, $2.01, $3.01 and $4.01. The hook already used
+  the 1h price; only the table was wrong.
+
 ## [0.3.0] - 2026-10-28
 
 ### Added

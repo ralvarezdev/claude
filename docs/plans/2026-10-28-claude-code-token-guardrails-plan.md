@@ -358,8 +358,9 @@ two audited sessions it lands within **6%** of the observed cost per turn
 and `output` (0.9k–1.7k) are stable. What the formula cannot know is the cache
 state, so the message also shows the rebuild price, which is 40x higher.
 
-At Sonnet 5.5 prices: 200k → $0.03/turn, 400k → $0.05, 600k → $0.07, 800k →
-$0.09, against $0.81/1.61/2.41/3.21 for a rebuild at the same sizes.
+At Sonnet 5.5 prices with the 1h TTL the main thread actually uses
+($4.00/M writes): 200k → $0.04/turn, 400k → $0.06, 600k → $0.08, 800k → $0.10,
+against $1.01/2.01/3.01/4.01 for a rebuild at the same sizes.
 
 Cost on the hot path: a file read plus one process per tool call, a few
 milliseconds. The transcript parse stayed in the `Stop` hook. The arithmetic only
