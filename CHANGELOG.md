@@ -10,6 +10,8 @@ the tooling that applies it. Anything that changes what `task install` writes to
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-28
+
 ### Added
 
 - `context-meter.sh` (`Stop`) and `context-checkpoint.sh` (`PreToolUse`) ask for
