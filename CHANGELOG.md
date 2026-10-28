@@ -10,6 +10,16 @@ the tooling that applies it. Anything that changes what `task install` writes to
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-28
+
+### Fixed
+
+- `apply-settings.py` merged `hooks` by unioning arrays, so editing a group's
+  shape left the old group behind and both ran. Installing 0.4.0 after 0.3.0 put
+  `loop-concision.sh` in two groups on `UserPromptSubmit`, so it fired twice per
+  prompt. The merge now converges per event: any live group that runs one of our
+  commands is replaced, and foreign groups on the same event are kept.
+
 ## [0.4.0] - 2026-10-28
 
 ### Added

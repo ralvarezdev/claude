@@ -62,6 +62,34 @@ def merge(live: object, ours: object) -> object:
     return ours
 
 
+def hook_commands(group: dict) -> set[str]:
+    """The command strings a hook group runs."""
+    return {
+        hook.get("command")
+        for hook in group.get("hooks", [])
+        if isinstance(hook, dict) and hook.get("command")
+    }
+
+
+def merge_hooks(live_hooks: dict, our_hooks: dict) -> dict:
+    """Converge per event instead of accumulating groups.
+
+    A plain array union appends a group whose shape changed, so editing a group
+    (adding a second hook to it, say) left the old one behind and both ran. For
+    each event, drop every live group that runs one of our commands and append
+    ours; foreign groups on the same event are kept.
+    """
+    merged = dict(live_hooks)
+    for event, groups in our_hooks.items():
+        if not isinstance(groups, list):
+            merged[event] = groups
+            continue
+        ours = set().union(*(hook_commands(group) for group in groups)) if groups else set()
+        kept = [group for group in merged.get(event, []) if not (hook_commands(group) & ours)]
+        merged[event] = kept + groups
+    return merged
+
+
 def contains(live: object, ours: object, path: str = "") -> list[str]:
     """Return the paths from `ours` that are missing or different in `live`."""
     missing: list[str] = []
@@ -118,7 +146,11 @@ def main() -> None:
 
     merged = live
     for source in SOURCES:
-        merged = merge(merged, load(source))
+        data = load(source)
+        hooks = data.pop("hooks", None)
+        merged = merge(merged, data)
+        if hooks is not None:
+            merged["hooks"] = merge_hooks(merged.get("hooks") or {}, hooks)
 
     rendered = json.dumps(merged, indent=2, ensure_ascii=False) + "\n"
     if args.dry_run:
