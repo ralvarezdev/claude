@@ -62,11 +62,6 @@ itself. Everything here comes from
   The checkpoints made the saving conditional on saying no. A 400k cap would turn
   the second threshold into a ceiling and keep the 200k question.
 
-- [ ] Alert on a cold-cache turn  #claude  P3
-  origin: [audit §5](../reviews/2026-10-28-claude-code-session-token-audit.md)
-  A `Notification` when a turn's `cache_creation` exceeds ~100k: that is a rebuild
-  that cost a dollar, and it is invisible in the moment.
-
 - [ ] Export OTel  #claude  P3
   origin: [plan §3.7](../plans/2026-10-28-claude-code-token-guardrails-plan.md)
   Only worth it with more than one machine. It is the only path to tokens per

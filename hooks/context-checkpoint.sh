@@ -24,7 +24,7 @@ state="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/.state"
 file="$state/context-$session"
 [[ -f $file ]] || exit 0
 
-read -r context delta output <"$file" || exit 0
+read -r context delta output _stamp <"$file" || exit 0
 [[ $context =~ ^[0-9]+$ ]] || exit 0
 [[ ${delta:-} =~ ^[0-9]+$ ]] || delta=0
 [[ ${output:-} =~ ^[0-9]+$ ]] || output=0

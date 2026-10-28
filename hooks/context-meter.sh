@@ -7,6 +7,8 @@
 #   context  the tokens the next request will re-send
 #   delta    the new tokens this turn added (context minus the previous context)
 #   output   the output tokens of the last response
+#   stamp    the epoch second this turn ended, so cache-watch.sh can tell how
+#            long the session has been idle and whether the cache expired
 #
 # delta and output are what make a per-turn cost estimate accurate: the context
 # is re-read at the cache price, but the new content is written at the write price
@@ -47,5 +49,5 @@ fi
 delta=$((context - previous))
 (( delta < 0 )) && delta=0
 
-printf '%s %s %s\n' "$context" "$delta" "$output" >"$file"
+printf '%s %s %s %s\n' "$context" "$delta" "$output" "$(date +%s)" >"$file"
 exit 0

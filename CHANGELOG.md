@@ -22,6 +22,11 @@ the tooling that applies it. Anything that changes what `task install` writes to
 
 ### Added
 
+- `cache-watch.sh` (`UserPromptSubmit`) warns before a request goes out when the
+  prompt cache has already expired. Expiry is deterministic — `last turn + TTL` —
+  so it is a prediction, not a heuristic: it returns a `systemMessage` the user
+  sees and an `additionalContext` for the model, with the rebuild cost. It cannot
+  see an early eviction, which is why the figure says "about".
 - `context-meter.sh` (`Stop`) and `context-checkpoint.sh` (`PreToolUse`) ask for
   confirmation once at 200k of context and again at 400k, instead of forcing a
   compaction. The meter parses the transcript once per turn and leaves the value

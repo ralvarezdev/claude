@@ -102,12 +102,12 @@ expect "normal prompt: no injection" allow "$got"
 # --- context meter and checkpoints ---
 state="$CLAUDE_CONFIG_DIR/hooks/.state"
 printf '{"session_id":"m1","transcript_path":"%s"}' "$deep" | hooks/context-meter.sh
-read -r got delta out <"$state/context-m1"
+read -r got delta out _stamp <"$state/context-m1"
 expect "meter records the context" 745001 "$got"
 expect "meter records the delta on the first turn" 745001 "$delta"
 
 printf '{"session_id":"m1","transcript_path":"%s"}' "$deep" | hooks/context-meter.sh
-read -r got delta out <"$state/context-m1"
+read -r got delta out _stamp <"$state/context-m1"
 expect "meter records no delta when nothing grew" 0 "$delta"
 
 sid="s1"
@@ -139,6 +139,31 @@ else
 fi
 
 expect "unknown session: allows" allow "$(printf '{"session_id":"nope"}' | hooks/context-checkpoint.sh | decision)"
+
+# --- cache expiry watcher ---
+alerts() {
+  local out
+  out=$(cat)
+  if [[ -z $out ]]; then echo no; return; fi
+  jq -r 'if .systemMessage then "yes" else "no" end' <<<"$out" 2>/dev/null || echo no
+}
+now=$(date +%s)
+
+echo "250000 1600 900 $((now - 120))" >"$state/context-s1"
+expect "warm session: no alert" no "$(printf '{"session_id":"s1"}' | hooks/cache-watch.sh | alerts)"
+
+echo "250000 1600 900 $((now - 4000))" >"$state/context-s1"
+expect "78 min idle: alerts" yes "$(printf '{"session_id":"s1"}' | hooks/cache-watch.sh | alerts)"
+
+echo "250000 1600 900 $((now - 4000))" >"$state/context-s1"
+msg=$(printf '{"session_id":"s1"}' | hooks/cache-watch.sh | jq -r '.systemMessage')
+if [[ $msg == *'$1.0'* ]]; then
+  expect "the alert carries the rebuild cost" yes yes
+else
+  expect "the alert carries the rebuild cost" "a dollar figure" "${msg:-<empty>}"
+fi
+
+expect "unknown session: no alert" no "$(printf '{"session_id":"nope"}' | hooks/cache-watch.sh | alerts)"
 
 rm -f "$deep" "$shallow"
 echo
