@@ -2,6 +2,16 @@
   "hooks": {
     "PreToolUse": [
       {
+        "matcher": "Bash|Read|Write|Edit|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "__HOME__/.claude/hooks/context-checkpoint.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
         "matcher": "Agent",
         "hooks": [
           {
@@ -18,6 +28,17 @@
             "type": "command",
             "command": "__HOME__/.claude/hooks/guard-transcript-reads.sh",
             "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "__HOME__/.claude/hooks/context-meter.sh",
+            "timeout": 10
           }
         ]
       }

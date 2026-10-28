@@ -46,7 +46,7 @@ In `~/.claude/settings.json` (user scope: applies to every project).
 
 ```json
 {
-  "autoCompactWindow": 200000,
+  "autoCompactWindow": 600000,
   "promptCacheTtl": "1h",
   "subagentPromptCacheTtl": "1h",
   "env": { "CLAUDE_CODE_FORK_SUBAGENT": "0" }
@@ -55,15 +55,23 @@ In `~/.claude/settings.json` (user scope: applies to every project).
 
 | Key | Effect | Cost of the change |
 |---|---|---|
-| `autoCompactWindow: 200000` | Compacts near 190k instead of 950k | Old history is summarised away; compaction itself costs one full read, amortised over the following turns |
+| `autoCompactWindow: 600000` | Compacts near 570k instead of 950k | A backstop, not the control: see §3.3.8 |
 | `promptCacheTtl: "1h"` | Pins the main thread's TTL at 1 hour | Writes at 2x instead of 1.25x; with 1.39M of writes per session, negligible |
 | `subagentPromptCacheTtl: "1h"` | Same for subagents, forks and compaction | Same; break-even on the second poll of a fork |
 | `CLAUDE_CODE_FORK_SUBAGENT: "0"` | Claude stops opening forks on its own | `/subtask` still opens them by hand |
 
+**The cap and the checkpoints are mutually exclusive controls.** A 200k cap holds
+the context at 200k, so a confirmation at 400k could never fire. This plan ships
+the checkpoint pair (§3.3.8) with a 600k backstop, so the context can grow where
+the work needs it at a cost the user approves turn by turn. If the priority is the
+lowest possible bill instead of control, set the cap to `200000` and drop the
+checkpoints: on the audited sessions that is ~$43 against $65 (an upper bound,
+because a lower cap also shrinks the forks' rewrites).
+
 Notes:
 
-- `200000` is the reasonable minimum: below 100k Claude Code ignores the value.
-  A project that needs more overrides it per session with `/autocompact 400k` or
+- Below 100k Claude Code ignores the value.
+  A project that needs more overrides it per session with `/autocompact 750k` or
   `--autocompact`.
 - All of this requires a build ≥ 2.1.296 (`autoCompactWindow`, `omitClaudeMd`) and
   ≥ 2.1.242 (the TTLs). Verified on 2.1.310.
@@ -89,7 +97,8 @@ invalidate the cache prefix. A bare rule (`"Read"`) would.
 
 ### 3.3 Hooks — priority 1
 
-Five mandatory, four optional, and a list of rejected ones. All of them are
+Five guards, a two-hook context checkpoint pair, four optional ones and a list of
+rejected ones. All of them are
 `command` hooks with `jq`: no network, short `timeout`, because `PreToolUse` runs
 on the critical path of every tool call (366 in the audited session).
 
@@ -284,8 +293,12 @@ Registration of the five in `~/.claude/settings.json`:
 {
   "hooks": {
     "PreToolUse": [
+      { "matcher": "Bash|Read|Write|Edit|Agent", "hooks": [{ "type": "command", "command": "~/.claude/hooks/context-checkpoint.sh", "timeout": 5 }] },
       { "matcher": "Agent", "hooks": [{ "type": "command", "command": "~/.claude/hooks/guard-deep-fork.sh", "timeout": 5 }] },
       { "matcher": "Read|Bash", "hooks": [{ "type": "command", "command": "~/.claude/hooks/guard-transcript-reads.sh", "timeout": 5 }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "~/.claude/hooks/context-meter.sh", "timeout": 10 }] }
     ],
     "PreModelSwitch": [
       { "hooks": [{ "type": "command", "command": "~/.claude/hooks/guard-model-switch.sh", "timeout": 5 }] }
@@ -318,6 +331,30 @@ Registration of the five in `~/.claude/settings.json`:
 | `SubagentStart` | `additionalContext` only, no blocking. |
 | `MessageDisplay` | Changes what is displayed on screen, not what the model sees. |
 | `prompt` or `agent` hook handlers | Cost tokens on every fire: counterproductive for saving tokens. |
+
+#### 3.3.8 Context checkpoints — ask instead of capping
+
+A hard cap and a confirmation cannot coexist: whichever is lower wins, and the
+other never fires. The checkpoint pair replaces the cap as the primary control,
+which is what makes a long context a decision instead of an accident.
+
+- `context-meter.sh` (`Stop`, once per turn) parses the transcript tail and writes
+  the current context to `hooks/.state/context-<session>`. This is the expensive
+  half and it runs once per turn, not once per tool call.
+- `context-checkpoint.sh` (`PreToolUse` on `Bash|Read|Write|Edit|Agent`) reads
+  that small file and returns `permissionDecision: "ask"` the first time the
+  context crosses 200k, and again at 400k. The message carries the per-turn cost
+  at the cache-read price.
+
+Cost on the hot path: a file read plus one process per tool call, a few
+milliseconds. The transcript parse stayed in the `Stop` hook. The user sees one
+prompt per threshold per session, not one per tool call.
+
+The marker is written **before** the answer is known, so a dismissal counts as
+answered. Without that, every tool call above the threshold would prompt again.
+
+Tested: 150k allows, 250k asks, 250k again does not, 450k asks again, unknown
+session allows, and the meter records the value the transcript reports.
 
 ### 3.4 `benchmark-monitor` skill — priority 1
 
@@ -456,7 +493,9 @@ than the whole plugin.
 
 ## 5. Exit criteria
 
-- [ ] A six-hour benchmark session ends below **$20** (baseline: $66.83).
+- [ ] A six-hour session with both checkpoints declined ends below **$20**
+      (baseline: $66.83). Accepting them is a deliberate choice and its cost is
+      expected.
 - [ ] No session opens a fork with the context above 150k.
 - [ ] No read of a `*.output` or a transcript reaches the context.
 - [ ] `audit-session-cost.py` reproduces the `cost-state` totals within 5%
@@ -473,6 +512,10 @@ than the whole plugin.
 | Not forking at depth | ~$16 on `a642592f`; up to $38 across the six | the window |
 | Cadence `<5` or `>60` | ~$12 in the polling case | the 1h TTL (both avoid the same rebuild) |
 | Fewer pastes and more `/clear` | ~$10–20 | the window |
+
+With the checkpoints instead of the cap the saving is not automatic: it is what
+the user buys by declining at 200k or at 400k. The figures below assume the cap
+path.
 
 They are not additive: the calculated counterfactual with the 200k ceiling leaves
 the session at **~$32**, and removing the forks as well at **~$20–25**. Working

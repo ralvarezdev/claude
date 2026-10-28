@@ -13,7 +13,7 @@ vars:
     sh: echo "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
   AUDIT: '{{.TASKFILE_DIR}}/scripts/audit-session-cost.py'
   APPLY: '{{.TASKFILE_DIR}}/scripts/apply-settings.py'
-  HOOKS: guard-deep-fork.sh guard-transcript-reads.sh guard-model-switch.sh guard-subagent-report.sh loop-concision.sh
+  HOOKS: context-meter.sh context-checkpoint.sh guard-deep-fork.sh guard-transcript-reads.sh guard-model-switch.sh guard-subagent-report.sh loop-concision.sh
 
 tasks:
   default:

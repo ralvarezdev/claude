@@ -10,6 +10,16 @@ the tooling that applies it. Anything that changes what `task install` writes to
 
 ## [Unreleased]
 
+### Added
+
+- `context-meter.sh` (`Stop`) and `context-checkpoint.sh` (`PreToolUse`) ask for
+  confirmation once at 200k of context and again at 400k, instead of forcing a
+  compaction. The meter parses the transcript once per turn and leaves the value
+  in a state file, so the checkpoint only reads a file on the hot path.
+- `autoCompactWindow` raised from 200000 to 600000: it is now a backstop above
+  both thresholds. A 200k cap and a 400k confirmation are mutually exclusive —
+  whichever is lower wins — so the repository ships the confirmation path.
+
 ### Fixed
 
 - `guard-deep-fork.sh` now denies only `subagent_type: "fork"`. It used to deny

@@ -99,6 +99,29 @@ expect "poll: injects concision" context "$got"
 got=$(printf '{"prompt":"fix the parser bug"}' | hooks/loop-concision.sh | injects)
 expect "normal prompt: no injection" allow "$got"
 
+# --- context meter and checkpoints ---
+printf '{"session_id":"m1","transcript_path":"%s"}' "$deep" | hooks/context-meter.sh
+got=$(cat "$CLAUDE_CONFIG_DIR/hooks/.state/context-m1" 2>/dev/null)
+expect "meter records the context" 745001 "$got"
+
+sid="s1"
+ckpt() { printf '{"session_id":"%s","tool_name":"Bash"}' "$1" | hooks/context-checkpoint.sh | decision; }
+
+echo 150000 >"$CLAUDE_CONFIG_DIR/hooks/.state/context-$sid"
+expect "context 150k: allows" allow "$(ckpt "$sid")"
+
+echo 250000 >"$CLAUDE_CONFIG_DIR/hooks/.state/context-$sid"
+expect "context 250k: asks" ask "$(ckpt "$sid")"
+
+expect "context 250k again: no second prompt" allow "$(ckpt "$sid")"
+
+echo 450000 >"$CLAUDE_CONFIG_DIR/hooks/.state/context-$sid"
+expect "context 450k: asks again" ask "$(ckpt "$sid")"
+
+expect "context 450k again: no second prompt" allow "$(ckpt "$sid")"
+
+expect "unknown session: allows" allow "$(printf '{"session_id":"nope"}' | hooks/context-checkpoint.sh | decision)"
+
 rm -f "$deep" "$shallow"
 echo
 printf '%d ok, %d failed\n' "$pass" "$fail"
