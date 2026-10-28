@@ -381,13 +381,23 @@ counted from the last request that used it, and both the TTL and that request ar
 local, so `expiry = last turn + TTL` is arithmetic, not a guess.
 
 `context-meter.sh` records the epoch of each turn. On `UserPromptSubmit`, before
-the request goes out, `cache-watch.sh` compares it to now and returns a
-`systemMessage` the user sees plus an `additionalContext` the model reads. At
-412k and a 60-minute TTL, a 78-minute gap is a $1.65 rebuild — the same shape as
-the single $2.95 event in the audited session, which nothing surfaced at the time.
+the request goes out, `cache-watch.sh` compares it to now.
 
-The warning is one event, not a recurring cost: the cold turn rebuilds the prefix
-and the following turns are warm again, which the message says explicitly.
+**A message alone would be theatre.** The hook runs before the request but does
+not stop it: the warning would appear and the cold turn would go out anyway. So
+above `CACHE_WATCH_BLOCK_USD` (default $0.50, roughly 125k of context at the 1h
+write price) the prompt is **blocked once**, the user runs `/clear` or resends
+deliberately, and the second attempt goes through. Below the threshold it only
+warns, because refusing a $0.20 rebuild would be worse than paying it. The block
+is keyed on the timestamp of the last turn, so one idle episode asks once and the
+resend is never trapped in a loop.
+
+At 412k and a 60-minute TTL, a 78-minute gap is a $1.65 rebuild — the same shape
+as the single $2.95 event in the audited session, which nothing surfaced at the
+time.
+
+The cost is one event, not recurring: the cold turn rebuilds the prefix and the
+following turns are warm again, which the message says explicitly.
 
 What it cannot predict is an early eviction: the API may drop an entry before its
 TTL under memory pressure. That residual risk is why the message says "about" and

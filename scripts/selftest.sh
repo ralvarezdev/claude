@@ -147,20 +147,32 @@ alerts() {
   if [[ -z $out ]]; then echo no; return; fi
   jq -r 'if .systemMessage then "yes" else "no" end' <<<"$out" 2>/dev/null || echo no
 }
+blocks() {
+  local out
+  out=$(cat)
+  if [[ -z $out ]]; then echo no; return; fi
+  jq -r 'if .decision == "block" then "yes" else "no" end' <<<"$out" 2>/dev/null || echo no
+}
 now=$(date +%s)
 
 echo "250000 1600 900 $((now - 120))" >"$state/context-s1"
 expect "warm session: no alert" no "$(printf '{"session_id":"s1"}' | hooks/cache-watch.sh | alerts)"
 
-echo "250000 1600 900 $((now - 4000))" >"$state/context-s1"
-expect "78 min idle: alerts" yes "$(printf '{"session_id":"s1"}' | hooks/cache-watch.sh | alerts)"
+echo "20000 1600 900 $((now - 4000))" >"$state/context-s1"
+expect "expired but cheap rebuild: warns, does not block" no "$(printf '{"session_id":"s1"}' | hooks/cache-watch.sh | blocks)"
+expect "expired but cheap rebuild: still alerts" yes "$(printf '{"session_id":"s1"}' | hooks/cache-watch.sh | alerts)"
 
 echo "250000 1600 900 $((now - 4000))" >"$state/context-s1"
-msg=$(printf '{"session_id":"s1"}' | hooks/cache-watch.sh | jq -r '.systemMessage')
+expect "expired and expensive: blocks" yes "$(printf '{"session_id":"s1"}' | hooks/cache-watch.sh | blocks)"
+
+expect "same episode, resend: goes through" no "$(printf '{"session_id":"s1"}' | hooks/cache-watch.sh | blocks)"
+
+echo "250000 1600 900 $((now - 4000))" >"$state/context-s1"
+msg=$(printf '{"session_id":"s1"}' | hooks/cache-watch.sh | jq -r '.reason // .systemMessage')
 if [[ $msg == *'$1.0'* ]]; then
-  expect "the alert carries the rebuild cost" yes yes
+  expect "the message carries the rebuild cost" yes yes
 else
-  expect "the alert carries the rebuild cost" "a dollar figure" "${msg:-<empty>}"
+  expect "the message carries the rebuild cost" "a dollar figure" "${msg:-<empty>}"
 fi
 
 expect "unknown session: no alert" no "$(printf '{"session_id":"nope"}' | hooks/cache-watch.sh | alerts)"

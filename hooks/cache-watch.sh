@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # UserPromptSubmit · no matcher
 #
-# Warns before the request goes out when the prompt cache has already expired.
-# Unlike the cost of a turn, this is not an estimate: the cache lifetime is
-# measured from the last request that used it, so expiry is
-# `last turn + TTL`, and both numbers are local.
+# Warns when the prompt cache has already expired, and blocks the prompt when the
+# rebuild is expensive enough to be worth a decision.
 #
-# The warning is one event, not a recurring cost: the cold turn rebuilds the
-# prefix and the following turns are warm again.
+# Why blocking: this hook runs before the request, but returning a message does
+# not stop the request. A warning the user cannot act on is theatre — the cold
+# turn goes out and the rebuild is paid. So above CACHE_WATCH_BLOCK_USD the prompt
+# is refused once, the user runs /clear or resends deliberately, and the second
+# attempt goes through.
+#
+# Expiry is deterministic: the entry lives for its TTL counted from the last
+# request that used it, so `last turn + TTL` is arithmetic, not a heuristic.
 set -uo pipefail
 
 payload=$(cat)
@@ -35,8 +39,24 @@ read -r rebuild < <(awk \
 
 minutes=$((idle / 60))
 ttl_minutes=$((ttl / 60))
+message="Cache expired: ${minutes} min idle, TTL ${ttl_minutes} min. Sending this re-reads ${context} tokens and rewrites them: about \$${rebuild} once, then back to normal."
 
-message="Cache expired: ${minutes} min idle, TTL ${ttl_minutes} min. This turn re-reads ${context} tokens and rewrites them: about \$${rebuild} once, then back to normal. /clear costs nothing."
+# Block once per idle episode, keyed on the timestamp of the last turn: the user
+# gets one decision, and the resend goes through.
+threshold=${CACHE_WATCH_BLOCK_USD:-0.50}
+worth_it=$(awk -v r="$rebuild" -v t="$threshold" 'BEGIN { print (r >= t) ? "yes" : "no" }')
+
+if [[ $worth_it == yes ]]; then
+  episode="$state/cacheblock-$session-$stamp"
+  if [[ ! -f $episode ]]; then
+    : >"$episode"
+    jq -n --arg msg "$message" '{
+      decision: "block",
+      reason: ($msg + " The prompt was not sent. Run /clear and resend to start clean, or resend to continue with this context and pay it.")
+    }'
+    exit 0
+  fi
+fi
 
 jq -n --arg msg "$message" '{
   systemMessage: $msg,
