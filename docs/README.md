@@ -5,12 +5,20 @@ frontmatter `status` tell you the state.
 
 | Folder | Holds |
 |---|---|
+| `backlog/` | Doing / Next / Later / Someday, plus raw capture |
 | `reviews/` | Measurements and audits, dated, never rewritten |
 | `plans/` | What is proposed: phases and exit criteria |
 | `templates/` | The template for each type |
 
 Rules: frontmatter on every document, relative links, a new document rather than
 an edit to a dated one.
+
+## backlog/
+
+| File | Holds |
+|---|---|
+| [claude.md](backlog/claude.md) | Open work: Doing (≤2), Next (≤5), Later, Someday |
+| [inbox.md](backlog/inbox.md) | Raw capture, emptied weekly |
 
 ## reviews/
 
