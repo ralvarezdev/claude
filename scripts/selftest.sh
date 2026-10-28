@@ -19,7 +19,7 @@ expect() {
     printf '  ok    %s\n' "$name"
     pass=$((pass + 1))
   else
-    printf '  FAIL  %s (esperaba %s, obtuvo %s)\n' "$name" "$want" "$got"
+    printf '  FAIL  %s (expected %s, got %s)\n' "$name" "$want" "$got"
     fail=$((fail + 1))
   fi
 }
@@ -52,48 +52,48 @@ deep=$(mktemp)
 printf '%s\n' '{"type":"assistant","message":{"id":"m1","usage":{"input_tokens":1,"cache_read_input_tokens":745000,"cache_creation_input_tokens":0}}}' >"$deep"
 
 got=$(printf '{"tool_name":"Agent","transcript_path":"%s"}' "$deep" | hooks/guard-deep-fork.sh | decision)
-expect "fork con 745k: bloquea" deny "$got"
+expect "fork at 745k: denies" deny "$got"
 
 shallow=$(mktemp)
 printf '%s\n' '{"type":"assistant","message":{"id":"m1","usage":{"input_tokens":1,"cache_read_input_tokens":40000,"cache_creation_input_tokens":0}}}' >"$shallow"
 got=$(printf '{"tool_name":"Agent","transcript_path":"%s"}' "$shallow" | hooks/guard-deep-fork.sh | decision)
-expect "fork con 40k: permite" allow "$got"
+expect "fork at 40k: allows" allow "$got"
 
 got=$(printf '{"tool_name":"Read","tool_input":{"file_path":"/tmp/claude-1000/x/tasks/a1.output"}}' | hooks/guard-transcript-reads.sh | decision)
-expect "Read de .output: bloquea" deny "$got"
+expect "Read of a .output: denies" deny "$got"
 
 got=$(printf '{"tool_name":"Bash","tool_input":{"command":"cat /tmp/claude-1000/x/tasks/a1.output | tail -3"}}' | hooks/guard-transcript-reads.sh | decision)
-expect "cat de .output: bloquea" deny "$got"
+expect "cat of a .output: denies" deny "$got"
 
 got=$(printf '{"tool_name":"Bash","tool_input":{"command":"grep -c ERROR /tmp/claude-1000/x/tasks/a1.output"}}' | hooks/guard-transcript-reads.sh | decision)
-expect "grep acotado: permite" allow "$got"
+expect "bounded grep: allows" allow "$got"
 
 got=$(printf '{"tool_name":"Read","tool_input":{"file_path":"src/main.py"}}' | hooks/guard-transcript-reads.sh | decision)
-expect "Read normal: permite" allow "$got"
+expect "Read of a normal file: allows" allow "$got"
 
 got=$(printf '{"from_model":"claude-sonnet-5-5","to_model":"claude-opus-5-5","context_tokens":400000,"prompt_cache_warm":true}' | hooks/guard-model-switch.sh | decision)
-expect "sonnet→opus con 400k: bloquea" deny "$got"
+expect "sonnet→opus at 400k: denies" deny "$got"
 
 got=$(printf '{"from_model":"claude-sonnet-5-5","to_model":"claude-opus-5-5","context_tokens":30000}' | hooks/guard-model-switch.sh | decision)
-expect "sonnet→opus con 30k: permite" allow "$got"
+expect "sonnet→opus at 30k: allows" allow "$got"
 
 got=$(printf '{"from_model":"claude-opus-5-5","to_model":"claude-sonnet-5-5","context_tokens":400000}' | hooks/guard-model-switch.sh | decision)
-expect "opus→sonnet con 400k: permite" allow "$got"
+expect "opus→sonnet at 400k: allows" allow "$got"
 
 long=$(printf 'x%.0s' $(seq 1 5000))
 got=$(printf '%s' "$(jq -n --arg m "$long" '{agent_id:"a1",last_assistant_message:$m}')" | hooks/guard-subagent-report.sh | decision)
-expect "reporte de 5000 chars: bloquea" block "$got"
+expect "5000-char report: blocks" block "$got"
 
 got=$(printf '%s' "$(jq -n --arg m "$long" '{agent_id:"a1",last_assistant_message:$m}')" | hooks/guard-subagent-report.sh | decision)
-expect "segundo intento del mismo agente: permite" allow "$got"
+expect "same agent, second attempt: allows" allow "$got"
 
 got=$(printf '{"prompt":"<task-notification><task-id>x</task-id>"}' | hooks/loop-concision.sh | injects)
-expect "sondeo: inyecta concisión" context "$got"
+expect "poll: injects concision" context "$got"
 
-got=$(printf '{"prompt":"arreglá el bug del parser"}' | hooks/loop-concision.sh | injects)
-expect "prompt normal: no inyecta" allow "$got"
+got=$(printf '{"prompt":"fix the parser bug"}' | hooks/loop-concision.sh | injects)
+expect "normal prompt: no injection" allow "$got"
 
 rm -f "$deep" "$shallow"
 echo
-printf '%d ok, %d fallos\n' "$pass" "$fail"
+printf '%d ok, %d failed\n' "$pass" "$fail"
 [[ $fail -eq 0 ]]

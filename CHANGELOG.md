@@ -10,6 +10,21 @@ the tooling that applies it. Anything that changes what `task install` writes to
 
 ## [Unreleased]
 
+### Changed
+
+- Translated the whole repository to English: the audit, the plan, the hook
+  messages, the script output, the Taskfile descriptions, the subagent and the
+  skill. Figures, findings and decisions are unchanged; only the language is.
+- The audit and the plan were translated in place rather than reissued as new
+  dated documents. That is the one exception to the "a dated document is never
+  rewritten" rule, and it is called out here so it stays legible.
+
+### Notes
+
+- `task check` compares installed files byte for byte, so an existing
+  installation reports `MISS` for every hook and script until `task install`
+  runs again.
+
 ## [0.2.0] - 2026-10-28
 
 The guardrails stop being a proposal and become something that runs.

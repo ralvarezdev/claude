@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PreModelSwitch · sin matcher
+# PreModelSwitch · no matcher
 #
 # Any model switch discards the prompt cache, because every model has its own.
 # Switching to a more expensive family also multiplies the per-token price. With
@@ -46,11 +46,10 @@ jq -n --arg from "$from" --arg to "$to" --argjson ctx "$context" --argjson warm 
     hookEventName: "PreModelSwitch",
     permissionDecision: "deny",
     permissionDecisionReason:
-      ("Salto a un modelo de gama superior (" + $from + " → " + $to + ") con "
-       + ($ctx | tostring) + " tokens de contexto y el caché "
-       + (if $warm then "caliente" else "frío" end)
-       + ". Cada turno pasa a costar más y el prefijo se reenvía entero. "
-       + "Terminá la tarea o hacé /clear antes de cambiar.")
+      ("Switching to a more expensive tier (" + $from + " → " + $to + ") with "
+       + ($ctx | tostring) + " tokens of context and a "
+       + (if $warm then "warm" else "cold" end) + " cache. Every turn costs more "
+       + "and the whole prefix is re-sent. Finish the task or /clear first.")
   }
 }'
 exit 0

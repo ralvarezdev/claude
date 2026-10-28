@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SubagentStop · sin matcher
+# SubagentStop · no matcher
 #
 # A subagent's final message is copied verbatim into the parent's context. If it
 # is a log dump, the parent pays for it on every later turn.
@@ -24,8 +24,8 @@ marker="$state_dir/report-${agent//[^A-Za-z0-9_-]/_}"
 
 jq -n --argjson n "${#message}" --argjson limit "$limit" '{
   decision: "block",
-  reason: ("El reporte final tiene " + ($n | tostring) + " caracteres y el límite es "
-           + ($limit | tostring) + ". Devolvé solo un JSON de ≤20 líneas con las métricas "
-           + "(run, trials, passed, failed, duration_s, first_error). El detalle va a un archivo.")
+  reason: ("The final report is " + ($n | tostring) + " characters against a limit of "
+           + ($limit | tostring) + ". Return only a JSON of ≤20 lines with the metrics "
+           + "(run, trials, passed, failed, duration_s, first_error). Detail goes to a file.")
 }'
 exit 0

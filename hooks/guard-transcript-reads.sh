@@ -32,7 +32,7 @@ jq -n '{
     hookEventName: "PreToolUse",
     permissionDecision: "deny",
     permissionDecisionReason:
-      "Transcript completo de una tarea o subagente: leerlo o hacerle tail vuelca el historial entero al contexto. Usá el reporte final del agente, grep acotado con | head -20, o el archivo de estado del job."
+      "Full transcript of a task or subagent: reading it or tailing it dumps the whole history into the context. Use the agent'\''s final report, a bounded grep with | head -20, or the job'\''s status file."
   }
 }'
 exit 0

@@ -1,25 +1,25 @@
 # Documentation
 
-Índice y convenciones. Una carpeta por tipo de documento; la carpeta y el
-frontmatter `status` dicen el estado.
+Index and conventions. One folder per document type; the folder and the
+frontmatter `status` tell you the state.
 
-| Carpeta | Contiene |
+| Folder | Holds |
 |---|---|
-| `reviews/` | Mediciones y auditorías, fechadas, nunca reescritas |
-| `plans/` | Lo que se propone construir: fases y criterios de salida |
-| `templates/` | Las plantillas de cada tipo |
+| `reviews/` | Measurements and audits, dated, never rewritten |
+| `plans/` | What is proposed: phases and exit criteria |
+| `templates/` | The template for each type |
 
-Reglas: frontmatter en todo documento, enlaces relativos, un documento nuevo
-antes que editar uno fechado.
+Rules: frontmatter on every document, relative links, a new document rather than
+an edit to a dated one.
 
 ## reviews/
 
-| Fecha | Documento | Estado |
+| Date | Document | Status |
 |---|---|---|
-| 2026-10-28 | [Auditoría: por qué dos sesiones de Claude Code costaron $66.83 y $28.50](reviews/2026-10-28-claude-code-session-token-audit.md) | done |
+| 2026-10-28 | [Audit: why two Claude Code sessions cost $66.83 and $28.50](reviews/2026-10-28-claude-code-session-token-audit.md) | done |
 
 ## plans/
 
-| Fecha | Documento | Estado |
+| Date | Document | Status |
 |---|---|---|
-| 2026-10-28 | [Guardrails de contexto y coste para las sesiones de Claude Code](plans/2026-10-28-claude-code-token-guardrails-plan.md) | draft |
+| 2026-10-28 | [Context and cost guardrails for Claude Code sessions](plans/2026-10-28-claude-code-token-guardrails-plan.md) | draft |

@@ -1,55 +1,55 @@
 # claude
 
-Notas de uso y coste de Claude Code: qué consume los tokens, por qué, y qué
-configuración lo acota. Nada de esto es código del producto; es el registro de las
-mediciones hechas sobre sesiones reales y de las decisiones que salieron de ellas.
+Usage and cost notes for Claude Code: what burns tokens, why, and which
+configuration limits it. None of this is product code; it is the record of
+measurements taken on real sessions and of the decisions that came out of them.
 
-## Por qué existe
+## Why it exists
 
-Dos sesiones de trabajo de siete horas costaron $66,83 y $28,50 sin que nada
-fallara visiblemente: el caché funcionaba, el modelo era el mismo y el trabajo era
-normal. La diferencia entre las dos era una sola cosa —seis subagentes `fork` que
-heredaron 745k de contexto— y eso no se ve en ningún panel. Este repositorio
-guarda la medición y el plan de guardrails para que no vuelva a pasar a ciegas.
+Two seven-hour work sessions cost $66.83 and $28.50 without anything visibly
+failing: the cache was working, the model was the same and the work was normal.
+The difference between the two was one thing — six `fork` subagents that inherited
+745k of context — and that is not visible in any panel. This repository keeps the
+measurement and the guardrails so it does not happen blind again.
 
-## Contenido
+## Contents
 
-| Documento | Qué es |
+| Document | What it is |
 |---|---|
-| [Auditoría de dos sesiones](docs/reviews/2026-10-28-claude-code-session-token-audit.md) | Qué se midió, qué se descartó y de dónde salió cada dólar |
-| [Plan de guardrails](docs/plans/2026-10-28-claude-code-token-guardrails-plan.md) | Settings, hooks, skill, subagente y script de auditoría, por fases |
+| [Session cost audit](docs/reviews/2026-10-28-claude-code-session-token-audit.md) | What was measured, what was ruled out, and where every dollar came from |
+| [Guardrails plan](docs/plans/2026-10-28-claude-code-token-guardrails-plan.md) | Settings, hooks, skill, subagent and audit script, in phases |
 
-## Método
+## Method
 
-Todo sale de los transcripts que Claude Code escribe en
-`~/.claude/projects/<proyecto>/<sesión>.jsonl`: cada registro `assistant` lleva el
-`usage` real de la API y cada sesión cierra con un `cost-state` con el total. Los
-comandos de reproducción están en el §9 de la auditoría.
+Everything comes from the transcripts Claude Code writes to
+`~/.claude/projects/<project>/<session>.jsonl`: every `assistant` record carries
+the real API `usage`, and every session ends with a `cost-state` record holding
+the total. The commands to reproduce it are in §9 of the audit.
 
-## Configuración
+## Configuration
 
-El repositorio no solo documenta: aplica. `Taskfile.yml` instala los guardrails en
-`~/.claude` de forma idempotente y con backup previo de `settings.json`.
+The repository does not only document: it applies. `Taskfile.yml` installs the
+guardrails into `~/.claude` idempotently, backing up `settings.json` first.
 
 ```bash
-task              # lista las tareas
-task check        # qué está aplicado y qué falta (solo lectura)
-task install      # settings + hooks + agente + skill
-task audit -- <sesión> [--cap 200000]
-task test         # pruebas de los hooks en un config dir desechable
+task              # list the tasks
+task check        # what is applied and what is missing (read-only)
+task install      # settings + hooks + agent + skill
+task audit -- <session> [--cap 200000]
+task test         # hook tests in a throwaway config dir
 ```
 
-| Pieza | Ruta en el repo | Destino |
+| Piece | Path in the repo | Destination |
 |---|---|---|
 | Settings | `settings/claude-{settings,hooks}.json` | `~/.claude/settings.json` (merge) |
 | Hooks | `hooks/*.sh` | `~/.claude/hooks/` |
-| Subagente | `agents/benchmark-runner.md` | `~/.claude/agents/` |
+| Subagent | `agents/benchmark-runner.md` | `~/.claude/agents/` |
 | Skill | `skills/benchmark-monitor/` | `~/.claude/skills/` |
 
-`task restore` devuelve `settings.json` al último backup; `task uninstall` quita
-hooks, agente y skill y deja los settings intactos.
+`task restore` rolls `settings.json` back to the last backup; `task uninstall`
+removes the hooks, agent and skill and leaves the settings alone.
 
-## Convenciones
+## Conventions
 
-`docs/` sigue el esquema de `docs-architect`: una carpeta por tipo de documento,
-frontmatter obligatorio y el índice en [`docs/README.md`](docs/README.md).
+`docs/` follows the `docs-architect` scheme: one folder per document type,
+mandatory frontmatter, and the index in [`docs/README.md`](docs/README.md).

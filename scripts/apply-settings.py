@@ -109,11 +109,11 @@ def main() -> None:
         for source in SOURCES:
             problems.extend(contains(live, load(source)))
         if problems:
-            print(f"{target}: faltan {len(problems)} valores")
+            print(f"{target}: {len(problems)} values missing")
             for problem in sorted(set(problems))[:20]:
                 print(f"  - {problem}")
             sys.exit(1)
-        print(f"{target}: todos los valores del repositorio están presentes")
+        print(f"{target}: every value from the repository is present")
         return
 
     merged = live

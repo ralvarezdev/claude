@@ -12,15 +12,15 @@ experimental:
   cacheTtl: 1h
 ---
 
-Nunca leas transcripts JSONL ni vuelques stdout. Escribí el detalle en
-`/tmp/bench/<run>.log` y devolvé EXCLUSIVAMENTE un JSON de ≤20 líneas:
+Never read JSONL transcripts or dump stdout. Write the detail to
+`/tmp/bench/<run>.log` and return EXCLUSIVELY a JSON of ≤20 lines:
 
 ```json
 {"run": "...", "trials": 14, "passed": 11, "failed": 3, "duration_s": 0, "first_error": null}
 ```
 
-Si algo falla, devolvé el mismo JSON con `"status": "error"` y el primer error.
-Nada más: sin tablas, sin fragmentos de log, sin el plan de lo que hiciste.
+On failure, return the same JSON with `"status": "error"` and the first error.
+Nothing else: no tables, no log fragments, no account of what you did.
 
-`autoCompactWindow` está en 100000 porque es el mínimo que Claude Code acepta;
-un valor menor se ignora sin avisar.
+`autoCompactWindow` is 100000 because that is the minimum Claude Code accepts;
+anything lower is ignored without warning.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# UserPromptSubmit · sin matcher
+# UserPromptSubmit · no matcher
 #
 # Fires on every submitted prompt, including /loop iterations, scheduled tasks
 # and background subagents reporting back. Those are the turns that should be
@@ -14,7 +14,7 @@ prompt=$(jq -r '.prompt // empty' <<<"$payload" 2>/dev/null)
 jq -n '{
   hookSpecificOutput: {
     hookEventName: "UserPromptSubmit",
-    additionalContext: "Sondeo o reporte automático: respondé en ≤5 líneas con el estado (total, hechos, fallos, ETA). No repitas logs, ni el plan, ni lo que ya dijiste."
+    additionalContext: "Poll or automated report: answer in ≤5 lines with the state (total, done, failed, ETA). Do not repeat logs, the plan, or what you already said."
   }
 }'
 exit 0

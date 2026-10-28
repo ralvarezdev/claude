@@ -94,7 +94,7 @@ tasks:
         if cmp -s skills/benchmark-monitor/SKILL.md "$dir/skills/benchmark-monitor/SKILL.md" 2>/dev/null; then note ok "benchmark-monitor"; else note MISS "benchmark-monitor"; gaps=$((gaps+1)); fi
 
         echo
-        if [ "$gaps" -eq 0 ]; then echo "todo aplicado"; else echo "$gaps pendientes — corré: task install"; fi
+        if [ "$gaps" -eq 0 ]; then echo "everything applied"; else echo "$gaps pending — run: task install"; fi
 
   verify:
     desc: Like check, but exits 1 when something is missing
@@ -103,7 +103,7 @@ tasks:
       - |
         out=$(task --silent check)
         echo "$out"
-        echo "$out" | grep -q "todo aplicado" || exit 1
+        echo "$out" | grep -q "everything applied" || exit 1
 
   uninstall:
     desc: Remove the hooks, agent and skill (settings.json is left alone)

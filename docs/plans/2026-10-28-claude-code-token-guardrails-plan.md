@@ -5,46 +5,44 @@ date: 2026-10-28
 related: [reviews/2026-10-28-claude-code-session-token-audit.md]
 ---
 
-# Plan: guardrails de contexto y coste para las sesiones de Claude Code (2026-10-28)
+# Plan: context and cost guardrails for Claude Code sessions (2026-10-28)
 
-## 1. Alcance
+## 1. Scope
 
-**Dentro.** Cambios en la configuración personal de Claude Code (`~/.claude/`), en
-el `.claude/` de los repositorios donde se trabaje y en sus `AGENTS.md`, que
-reduzcan el coste por sesión y
-hagan imposibles las dos causas medidas en
-[la auditoría](../reviews/2026-10-28-claude-code-session-token-audit.md): el
-contexto sin techo y los forks que lo heredan.
+**In.** Changes to the personal Claude Code configuration (`~/.claude/`), to the
+`.claude/` of the repositories where the work happens and to their `AGENTS.md`,
+that reduce the cost per session and make the two causes measured in
+[the audit](../reviews/2026-10-28-claude-code-session-token-audit.md) impossible:
+unbounded context and the forks that inherit it.
 
-**Fuera.** El agente PLC, el benchmark, el pipeline de `plc-prompts` y cualquier
-cosa que pueda mover el resultado de una corrida. Este plan no cambia el
-comportamiento del agente que se evalúa; cambia cómo trabajamos nosotros con
-Claude Code encima de él. Por eso no lleva entrada en `CHANGELOG.md` mientras se
-quede en herramientas de sesión, y sí la llevaría si alguna pieza acaba
-versionada como parte del repo.
+**Out.** The PLC agent, the benchmark, the `plc-prompts` pipeline and anything
+that could move the result of a run. This plan does not change the behaviour of
+the agent being evaluated; it changes how we work with Claude Code on top of it.
+That is why it carries no `CHANGELOG.md` entry while it stays session tooling, and
+would carry one if any piece ended up versioned as part of the repo.
 
-## 2. Diagnóstico que justifica cada pieza
+## 2. The diagnosis behind each piece
 
-| Causa medida | Evidencia | Palanca |
+| Measured cause | Evidence | Lever |
 |---|---|---|
-| Contexto sin techo (754k y 841k) | Ventana nativa de 1M; auto-compact cerca de 950k nunca se activó | `autoCompactWindow` |
-| Coste cuadrático en turnos | 440 peticiones, 167 M de lectura en el principal | ventana + `/clear` |
-| Forks que heredan el contexto | 6 forks, 38,39 $ = 57% de la sesión | modo fork + guardrail |
-| TTL de 5 min en los forks | 7 rebuilds de 787k cada 10 min en `a642592f` | TTL 1 h + cadencia |
-| Hooks que inyectan contexto | 272 KB de `hook_success`; 146 KB en `SessionStart:resume` | auditoría del plugin |
-| Pastes de terminal de la VM | 15 pastes, 157k chars, ~52k tokens | hábito + skill |
-| Thinking nunca limpiado | 213.574 tokens con `keep: "all"` | no configurable; solo acotar turnos |
+| Unbounded context (754k and 841k) | Native 1M window; auto-compact near 950k never fired | `autoCompactWindow` |
+| Quadratic cost in turns | 440 requests, 167M reads in the main thread | window + `/clear` |
+| Forks that inherit the context | 6 forks, $38.39 = 57% of the session | fork mode + guardrail |
+| 5-minute TTL inside forks | 7 rebuilds of 787k every 10 min in `a642592f` | 1h TTL + cadence |
+| Hooks injecting context | 272 KB of `hook_success`; 146 KB on `SessionStart:resume` | plugin audit |
+| VM terminal pastes | 15 pastes, 157k chars, ~52k tokens | habit + skill |
+| Thinking never cleared | 213,574 tokens with `keep: "all"` | not configurable; bound the turns instead |
 
-El principio que ordena el plan: **cuanto más cerca de la configuración y más
-lejos de las instrucciones, más garantía y menos coste en contexto.** Un
-`CLAUDE.md` que pide moderación se paga en cada turno y no impide nada; un
-`autoCompactWindow` se paga una vez y se cumple siempre.
+The principle that orders the plan: **the closer to configuration and the further
+from instructions, the stronger the guarantee and the lower the context cost.** A
+`CLAUDE.md` asking for restraint is paid on every turn and enforces nothing; an
+`autoCompactWindow` is paid once and always applies.
 
-## 3. Propuestas por tipo de herramienta
+## 3. Proposals by tool type
 
-### 3.1 Settings — prioridad 0
+### 3.1 Settings — priority 0
 
-En `~/.claude/settings.json` (alcance usuario: aplica a todos los proyectos).
+In `~/.claude/settings.json` (user scope: applies to every project).
 
 ```json
 {
@@ -55,25 +53,25 @@ En `~/.claude/settings.json` (alcance usuario: aplica a todos los proyectos).
 }
 ```
 
-| Clave | Efecto | Coste del cambio |
+| Key | Effect | Cost of the change |
 |---|---|---|
-| `autoCompactWindow: 200000` | Compacta cerca de 190k en vez de 950k | Se pierde historial antiguo; la compactación cuesta una lectura completa, amortizada en los turnos siguientes |
-| `promptCacheTtl: "1h"` | Fija el TTL del hilo principal en 1 h | Escrituras a 2x en vez de 1,25x; con 1,39 M de escritura por sesión, despreciable |
-| `subagentPromptCacheTtl: "1h"` | Igual para subagentes, forks y compactación | Igual; break-even en el segundo sondeo de un fork |
-| `CLAUDE_CODE_FORK_SUBAGENT: "0"` | Claude deja de abrir forks por su cuenta | `/subtask` sigue disponible para abrirlos a mano |
+| `autoCompactWindow: 200000` | Compacts near 190k instead of 950k | Old history is summarised away; compaction itself costs one full read, amortised over the following turns |
+| `promptCacheTtl: "1h"` | Pins the main thread's TTL at 1 hour | Writes at 2x instead of 1.25x; with 1.39M of writes per session, negligible |
+| `subagentPromptCacheTtl: "1h"` | Same for subagents, forks and compaction | Same; break-even on the second poll of a fork |
+| `CLAUDE_CODE_FORK_SUBAGENT: "0"` | Claude stops opening forks on its own | `/subtask` still opens them by hand |
 
-Notas:
+Notes:
 
-- `200000` es el mínimo razonable: por debajo de 100k Claude Code ignora el valor.
-  Si algún proyecto necesita más, se sobreescribe por sesión con `/autocompact 400k`
-  o con `--autocompact`.
-- Todo esto requiere un build ≥ 2.1.296 (`autoCompactWindow`, `omitClaudeMd`) y
-  ≥ 2.1.242 (TTLs). Verificado en 2.1.310.
-- La alternativa a apagar el modo fork es dejarlo y confiar en el guardrail de
-  §3.3.1. Se prefiere apagarlo: el guardrail protege del caso caro, pero no del
-  fork innecesario.
+- `200000` is the reasonable minimum: below 100k Claude Code ignores the value.
+  A project that needs more overrides it per session with `/autocompact 400k` or
+  `--autocompact`.
+- All of this requires a build ≥ 2.1.296 (`autoCompactWindow`, `omitClaudeMd`) and
+  ≥ 2.1.242 (the TTLs). Verified on 2.1.310.
+- The alternative to turning fork mode off is to keep it and rely on the guardrail
+  in §3.3.1. Turning it off is preferred: the guardrail protects against the
+  expensive case, not against the unnecessary fork.
 
-### 3.2 Reglas de permisos — prioridad 0
+### 3.2 Permission rules — priority 0
 
 ```json
 {
@@ -86,65 +84,70 @@ Notas:
 }
 ```
 
-Reglas **con scope**: no cambian las definiciones de herramientas y por tanto no
-invalidan el prefijo del caché. Una regla desnuda (`"Read"`) sí lo invalidaría.
+**Scoped** rules: they do not change tool definitions and therefore do not
+invalidate the cache prefix. A bare rule (`"Read"`) would.
 
-### 3.3 Hooks — prioridad 1
+### 3.3 Hooks — priority 1
 
-Cinco obligatorios, cuatro opcionales y una lista de descartados. Todos son
-`command` con `jq`: sin red y con `timeout` corto, porque `PreToolUse` corre en el
-camino crítico de cada llamada a herramienta (366 en la sesión auditada).
+Five mandatory, four optional, and a list of rejected ones. All of them are
+`command` hooks with `jq`: no network, short `timeout`, because `PreToolUse` runs
+on the critical path of every tool call (366 in the audited session).
 
-Los scripts canónicos están en `hooks/*.sh` y los aplica `task install`; los
-fragmentos de abajo muestran la forma y la decisión de cada uno. La diferencia
-importa en un detalle: los scripts reales no usan `set -e`, porque un
-`(( condición )) && exit 0` que falla termina el hook con código 1 y Claude Code
-lo reporta como error de hook. Usan `if` explícito y cierran con `exit 0`.
+The canonical scripts live in `hooks/*.sh` and `task install` applies them; the
+snippets below show the shape and the decision of each. The difference matters in
+one detail: the real scripts do not use `set -e`, because a failing
+`(( condition )) && exit 0` ends the hook with code 1 and Claude Code reports it as
+a hook error. They use explicit `if`s and close with `exit 0`.
 
-#### 3.3.1 `guard-deep-fork.sh` — bloquear forks con el padre profundo
+#### 3.3.1 `guard-deep-fork.sh` — block forks with a deep parent
 
-Por qué aquí y no en `SubagentStart`: ese evento **no puede bloquear** la creación
-de un subagente. El único punto de bloqueo es `PreToolUse` sobre `Agent`.
+Why here and not in `SubagentStart`: that event **cannot block** subagent
+creation. The only blocking point is `PreToolUse` on `Agent`.
 
 ```bash
 #!/usr/bin/env bash
 # PreToolUse · matcher: Agent
-# Niega el fork si el contexto de la sesión ya supera DEEP_FORK_LIMIT.
-set -euo pipefail
+# Denies the fork when the session context already exceeds DEEP_FORK_LIMIT.
+set -uo pipefail
 input=$(cat)
 transcript=$(jq -r '.transcript_path // empty' <<<"$input")
 [[ -z $transcript || ! -f $transcript ]] && exit 0
 
 limit=${DEEP_FORK_LIMIT:-150000}
-ctx=$(jq -s -r '[.[] | select(.type=="assistant" and .message.usage)
-  | .message.usage.input_tokens
-  + .message.usage.cache_read_input_tokens
-  + .message.usage.cache_creation_input_tokens] | last // 0' "$transcript")
+ctx=$(tail -n 4000 "$transcript" | grep -F '"type":"assistant"' | tail -n 20 | tac \
+  | jq -r 'select(.message.usage)
+      | .message.usage.input_tokens
+      + .message.usage.cache_read_input_tokens
+      + .message.usage.cache_creation_input_tokens' | head -1)
 
-(( ctx < limit )) && exit 0
+[[ $ctx =~ ^[0-9]+$ ]] || exit 0
+(( ctx >= limit )) || exit 0
 
 jq -n --argjson c "$ctx" --argjson l "$limit" '{
   hookSpecificOutput: {
     hookEventName: "PreToolUse",
     permissionDecision: "deny",
     permissionDecisionReason:
-      ("Contexto en " + ($c|tostring) + " tokens (límite " + ($l|tostring) + "). "
-       + "No forkear: usar un subagente con contexto fresco y un brief, o /clear antes.")
+      ("Context is " + ($c|tostring) + " tokens (limit " + ($l|tostring) + "). "
+       + "Do not fork: a fork copies the history and re-sends it every turn. "
+       + "Use a fresh subagent with a brief, or /clear first.")
   }
 }'
+exit 0
 ```
 
-Pendiente antes de activar: confirmar con `claude --debug` cómo llega el fork en
-`tool_input` (`subagent_type` u otro campo). Si no se distingue, la versión
-conservadora niega **todo** `Agent` por encima del umbral, que es aceptable porque
-por encima de 150k casi ningún subagente compensa.
+Open item: the installed script denies **any** `Agent` call above the limit, which
+is the conservative version. In the audited transcripts a fork arrives as
+`"subagent_type": "fork"`, so the check can be narrowed to that value, letting
+`Explore`, `Plan` and fresh subagents through at any depth. Narrowing it is a
+behaviour change and therefore a release of its own.
 
-#### 3.3.2 `guard-transcript-reads.sh` — hacer ejecutable la advertencia
+#### 3.3.2 `guard-transcript-reads.sh` — make the warning executable
 
 ```bash
 #!/usr/bin/env bash
 # PreToolUse · matcher: Read|Bash
-set -euo pipefail
+set -uo pipefail
 input=$(cat)
 tool=$(jq -r '.tool_name' <<<"$input")
 target=$(case $tool in
@@ -152,63 +155,71 @@ target=$(case $tool in
   Bash) jq -r '.tool_input.command // empty' <<<"$input" ;;
 esac)
 
-[[ $target =~ (\.output|/tmp/claude-[0-9]+/.*tasks) ]] || exit 0
-[[ $tool == Bash && ! $target =~ (cat|tail|head|less|bat|Read) ]] && exit 0
+transcript_re='\.output([^[:alnum:]]|$)|/tasks/[^/[:space:]]+$|/subagents/agent-[^/]*\.jsonl'
+[[ $target =~ $transcript_re ]] || exit 0
+[[ $tool == Bash ]] && ! [[ $target =~ (cat|tail|head|less|bat) ]] && exit 0
 
 jq -n '{
   hookSpecificOutput: {
     hookEventName: "PreToolUse",
     permissionDecision: "deny",
     permissionDecisionReason:
-      "Transcript de subagente. No se lee ni se hace tail: usá el reporte final del agente o jq sobre el estado del job."
+      "Subagent transcript. Do not read it or tail it: use the agent's final report, a bounded grep, or the job's status file."
   }
 }'
+exit 0
 ```
 
-#### 3.3.3 `guard-subagent-report.sh` — contrato de salida verificable
+#### 3.3.3 `guard-subagent-report.sh` — a verifiable output contract
 
 ```bash
 #!/usr/bin/env bash
-# SubagentStop · sin matcher
-set -euo pipefail
+# SubagentStop · no matcher
+set -uo pipefail
 input=$(cat)
 msg=$(jq -r '.last_assistant_message // empty' <<<"$input")
 (( ${#msg} <= 4000 )) && exit 0
 
 jq -n --argjson n "${#msg}" '{
   decision: "block",
-  reason: ("El reporte final tiene " + ($n|tostring) + " caracteres. Comprimilo a un JSON de ≤20 líneas con las métricas; el detalle va a un archivo, no al mensaje.")
+  reason: ("The final report is " + ($n|tostring) + " characters. Compress it to a JSON of ≤20 lines with the metrics; detail goes to a file, not the message.")
 }'
+exit 0
 ```
 
-#### 3.3.4 `loop-concision.sh` — sondeos cortos
+`SubagentStop` with `decision: block` means "keep working", so the installed
+script blocks **once per agent** (a marker under `.state/`) and lets the second
+attempt through. Without that counter the subagent can loop.
+
+#### 3.3.4 `loop-concision.sh` — short polls
 
 ```bash
 #!/usr/bin/env bash
-# UserPromptSubmit · sin matcher
-# Se dispara también en cada tick de /loop y en cada reporte de subagente.
-set -euo pipefail
+# UserPromptSubmit · no matcher
+# Also fires on every /loop tick and every background subagent report.
+set -uo pipefail
 prompt=$(jq -r '.prompt // empty')
 [[ $prompt =~ (task-notification|\[loop|scheduled) ]] || exit 0
 
 jq -n '{hookSpecificOutput: {hookEventName: "UserPromptSubmit",
-  additionalContext: "Sondeo: respondé en ≤5 líneas con el estado. No repitas logs ni el plan."}}'
+  additionalContext: "Poll or automated report: answer in ≤5 lines with the state. Do not repeat logs or the plan."}}'
+exit 0
 ```
 
-#### 3.3.5 `guard-model-switch.sh` — sin saltos a un modelo superior con el contexto profundo
+#### 3.3.5 `guard-model-switch.sh` — no upgrade with a deep context
 
-No es solo Opus: **cualquier** salto a un modelo de gama superior multiplica el
-coste por token, y **cualquier** salto de modelo, en cualquier dirección, tira el
-prefijo del caché porque cada modelo tiene el suyo. Así que el guardrail compara
-gamas, no nombres.
+It is not only Opus: **any** switch to a more expensive tier multiplies the
+per-token cost, and **any** model switch, in either direction, discards the cache
+prefix because every model has its own. So the guardrail compares tiers, not
+names.
 
-El input de este evento ya trae lo necesario (`from_model`, `to_model`,
-`context_tokens`, `prompt_cache_warm`): no hay que leer el transcript.
+This event's input already carries what is needed (`from_model`, `to_model`,
+`context_tokens`, `prompt_cache_warm`): the transcript never has to be read.
 
 ```bash
 #!/usr/bin/env bash
-# PreModelSwitch · sin matcher (los modelos de gateway no tienen nombre canónico)
-set -euo pipefail
+# PreModelSwitch · no matcher (gateway models have no canonical name)
+set -uo pipefail
 input=$(cat)
 from=$(jq -r '.from_model // ""' <<<"$input")
 to=$(jq -r '.to_model // ""' <<<"$input")
@@ -221,15 +232,15 @@ tier() {
     *sonnet*) echo 2 ;;
     *opus*)   echo 3 ;;
     *fable*|*mythos*) echo 4 ;;
-    *)        echo 9 ;;   # desconocido: se trata como superior
+    *)        echo 9 ;;   # unknown: treated as an upgrade
   esac
 }
 
 tf=$(tier "$from"); tt=$(tier "$to")
 
-# Bajar de gama se permite: paga un rebuild, pero abarata todos los turnos siguientes.
+# Downgrades are allowed: they pay one rebuild and make every later turn cheaper.
 (( tt < tf )) && exit 0
-# Misma gama: se permite (el cambio de caché no lo evita un hook).
+# Same tier: allowed (a hook cannot avoid the cache change anyway).
 (( tt == tf )) && exit 0
 
 limit=${DEEP_SWITCH_LIMIT:-150000}
@@ -240,27 +251,27 @@ jq -n --arg from "$from" --arg to "$to" --argjson ctx "$ctx" --argjson warm "$wa
     hookEventName: "PreModelSwitch",
     permissionDecision: "deny",
     permissionDecisionReason:
-      ("Salto a un modelo de gama superior (" + $from + " → " + $to + ") con "
-       + ($ctx|tostring) + " tokens de contexto y el caché "
-       + (if $warm then "caliente" else "frío" end)
-       + ". Cada turno pasa a costar más y el prefijo se reenvía entero. "
-       + "Terminá la tarea o hacé /clear antes de cambiar.")
+      ("Upgrade to a more expensive tier (" + $from + " → " + $to + ") with "
+       + ($ctx|tostring) + " tokens of context and a "
+       + (if $warm then "warm" else "cold" end) + " cache. Every turn costs more "
+       + "and the whole prefix is re-sent. Finish the task or /clear first.")
   }
 }'
+exit 0
 ```
 
-Notas verificadas sobre el evento:
+Verified notes about the event:
 
-- `matcher` compara contra el nombre canónico del modelo destino; un alias, un ID
-  con fecha y un ID de proveedor matchean igual. Por eso el filtro real va en el
-  script y el matcher se omite: un modelo custom de gateway hace que Claude Code
-  corra **todos** los hooks `PreModelSwitch` de todos modos.
-- El hook **no** se ejecuta en los cambios que Claude Code hace por su cuenta, como
-  el fallback automático. Ese caso queda fuera del guardrail.
-- Se puede bloquear con `permissionDecision: "deny"` o con `exit 2` y el motivo en
+- `matcher` compares against the canonical name of the target model; an alias, a
+  dated id and a provider id all match the same name. The real filter therefore
+  lives in the script and the matcher is omitted: a custom gateway model makes
+  Claude Code run **every** `PreModelSwitch` hook anyway.
+- The hook **does not** run for switches Claude Code makes on its own, such as
+  automatic fallback. That case is outside the guardrail.
+- It can block with `permissionDecision: "deny"` or with `exit 2` and the reason on
   stderr.
 
-Registro de los cinco en `~/.claude/settings.json`:
+Registration of the five in `~/.claude/settings.json`:
 
 ```json
 {
@@ -282,29 +293,29 @@ Registro de los cinco en `~/.claude/settings.json`:
 }
 ```
 
-#### 3.3.6 Opcionales, con su contrapartida
+#### 3.3.6 Optional, with their trade-off
 
-| Hook | Qué haría | Por qué no por defecto |
+| Hook | What it would do | Why not by default |
 |---|---|---|
-| `PostToolUse` + `updatedToolOutput` | Recortar cada salida a ~8k chars conservando cabeza y cola | Recortar a ciegas esconde el error que se estaba buscando. Solo con lista blanca de comandos. |
-| `PostToolBatch` | Medir tokens por lote y avisar cuando un batch mete >20k | Interviene en caliente sobre el criterio del agente; ruido si se calibra mal. |
-| `PostCompact` | Registrar cada compactación en un log de coste | Solo telemetría; útil para saber si el techo de 200k se está rozando. |
-| `InstructionsLoaded` | Registrar qué `CLAUDE.md` y `.claude/rules/*.md` se cargan y cuánto pesan | Solo auditoría del prefijo permanente. |
+| `PostToolUse` + `updatedToolOutput` | Trim every output to ~8k chars, keeping head and tail | Trimming blind hides the error you were looking for. Only with a command allowlist. |
+| `PostToolBatch` | Measure tokens per batch and warn above 20k | Intervenes in the agent's judgement in the middle of a run; noisy if mis-tuned. |
+| `PostCompact` | Log every compaction to a cost log | Telemetry only; useful to know whether the 200k ceiling is being touched. |
+| `InstructionsLoaded` | Record which `CLAUDE.md` and `.claude/rules/*.md` load, and how much they weigh | Audit of the permanent prefix only. |
 
-#### 3.3.7 Descartados, y por qué
+#### 3.3.7 Rejected, and why
 
-| Evento | Motivo |
+| Event | Reason |
 |---|---|
-| `PreCompact` (`auto`) | Permite bloquear la compactación automática: justo lo contrario de lo que hace falta aquí. |
-| `FileChanged` | No tiene control de decisión: no puede inyectar contexto. El "que el job avise en vez de sondear" no es viable por esta vía. |
-| `SubagentStart` | Solo `additionalContext`, sin bloqueo. |
-| `MessageDisplay` | Cambia lo que se ve en pantalla, no lo que ve el modelo. |
-| Hooks de tipo `prompt` o `agent` | Cuestan tokens en cada disparo: contraproducentes para ahorrar tokens. |
+| `PreCompact` (`auto`) | Can block automatic compaction: the exact opposite of what is needed here. |
+| `FileChanged` | Has no decision control and cannot inject context. "Let the job notify instead of polling" is not viable this way. |
+| `SubagentStart` | `additionalContext` only, no blocking. |
+| `MessageDisplay` | Changes what is displayed on screen, not what the model sees. |
+| `prompt` or `agent` hook handlers | Cost tokens on every fire: counterproductive for saving tokens. |
 
-### 3.4 Skill `benchmark-monitor` — prioridad 1
+### 3.4 `benchmark-monitor` skill — priority 1
 
-Una skill genérica de "economía de tokens" no se invoca nunca. Esta tiene forma de
-tarea, así que matchea cuando el usuario dice "seguí el progreso del job".
+A generic "token economy" skill never gets invoked. This one is task-shaped, so
+it matches when the user says "follow the job's progress".
 
 `.claude/skills/benchmark-monitor/SKILL.md`:
 
@@ -317,33 +328,33 @@ description: Follow a running benchmark or long job without inflating the sessio
 
 # Benchmark monitor
 
-## Regla
+## Rule
 
-El estado vive en un archivo, no en el chat. El runner (no el agente) escribe
-`/tmp/<run>/status.json` con: total, done, failed, current_trial, elapsed_s,
-last_error. El agente lee ese archivo con `jq -c` y nunca el log completo.
+State lives in a file, not in the chat. The runner (not the agent) writes
+`/tmp/<run>/status.json` with total, done, failed, current_trial, elapsed_s and
+last_error. The agent reads that file with `jq -c` and never the full log.
 
-## Procedimiento
+## Procedure
 
-1. Localizar el archivo de estado. Si no existe, crearlo con el runner antes de
-   empezar; no arrancar un sondeo sobre un log.
-2. Leer solo: `jq -c '{done:([.trials[]|select(.status!="pending")]|length),
+1. Find the status file. If it does not exist, create it with the runner before
+   starting; do not poll a log.
+2. Read only what is needed: `jq -c '{done:([.trials[]|select(.status!="pending")]|length),
    total:(.trials|length), fails:[.trials[]|select(.status=="fail")|.id]}' status.json`
-3. Reportar en ≤5 líneas: total, hechos, fallos, ETA, primera acción sugerida.
-4. Cadencia: <5 min o >60 min, nunca en el medio. Preferir `/loop 5m` sobre un
-   `sleep` en `Bash`, que ocupa un turno entero.
-5. Prohibido: `cat`/`tail`/`less` sobre `*.output`, transcripts JSONL o logs de
-   más de 200 líneas. Si hace falta un detalle, `grep` acotado con `| head -20`.
+3. Report in ≤5 lines: total, done, failed, ETA, first suggested action.
+4. Cadence: <5 min or >60 min, never in between. Prefer `/loop 5m` over a
+   `sleep` in `Bash`, which occupies a whole turn.
+5. Forbidden: `cat`/`tail`/`less` on `*.output`, JSONL transcripts or logs over
+   200 lines. If detail is needed, a bounded `grep | head -20`.
 
-## Al terminar
+## When done
 
-Un párrafo con el resultado agregado y el enlace al artefacto. Nada de volcar la
-tabla de los N trials.
+One paragraph with the aggregate result and the artifact. Never dump the table of
+N trials.
 ```
 
-### 3.5 Subagente `benchmark-runner` — prioridad 1
+### 3.5 `benchmark-runner` subagent — priority 1
 
-Reemplaza al fork para trabajo de benchmark: contexto fresco y contrato de salida.
+Replaces the fork for benchmark work: fresh context and an output contract.
 
 `.claude/agents/benchmark-runner.md`:
 
@@ -362,121 +373,123 @@ experimental:
   cacheTtl: 1h
 ---
 
-Nunca leas transcripts JSONL ni vuelques stdout. Escribí el detalle en
-/tmp/bench/<run>.log y devolvé EXCLUSIVAMENTE un JSON de ≤20 líneas:
+Never read JSONL transcripts or dump stdout. Write the detail to
+/tmp/bench/<run>.log and return EXCLUSIVELY a JSON of ≤20 lines:
 {"run","trials","passed","failed","duration_s","first_error"}.
-Si algo falla, devolvé el JSON con status:"error" y el primer error. Nada más.
+On failure, return the same JSON with status:"error" and the first error.
+Nothing else.
 ```
 
-`autoCompactWindow` aquí es 100000 porque es el mínimo aceptado; 50000 se ignora
-en silencio.
+`autoCompactWindow` is 100000 because that is the minimum accepted; 50000 is
+ignored silently.
 
-### 3.6 `AGENTS.md` — prioridad 2
+### 3.6 `AGENTS.md` — priority 2
 
-Solo el criterio que no se puede automatizar. Tres líneas, no un párrafo:
+Only the judgement that cannot be automated. Three lines, not a paragraph:
 
 ```markdown
-## Coste de la sesión
+## Session cost
 
-- No abrir un fork si el contexto supera 150k: delegar con subagente fresco y brief.
-- Los monitores leen un archivo de estado; nunca volcar logs ni transcripts al chat.
-- Al cambiar de repositorio o de tarea, `/clear`.
+- Do not open a fork when the context is above 150k: delegate with a fresh subagent and a brief.
+- Monitors read a status file; never dump logs or transcripts into the chat.
+- When switching repository or task, `/clear`.
 ```
 
-### 3.7 Observabilidad — prioridad 0 (script) y 2 (OTel)
+### 3.7 Observability — priority 0 (script) and 2 (OTel)
 
-`scripts/audit-session-cost.py`: recibe un id de sesión, localiza el JSONL y los
-`subagents/`, y devuelve la tabla del review en una pasada (por fork, por hora,
-lecturas/escrituras/output, y el contrafactual a un tope dado).
+`scripts/audit-session-cost.py`: takes a session id, finds the JSONL and the
+`subagents/`, and prints the audit table in one pass (per fork, per agent, reads,
+writes, output, and the counterfactual at a given cap).
 
-Interfaz:
+Interface:
 
 ```
 $ scripts/audit-session-cost.py 01a5c123 --cap 200000
-sesión     reqs   lectura   escritura  output   coste   con tope 200k
-main        440   166.0M    1.39M      397k     $26.12  $12.9
-agent-a642   48    31.8M    5.52M       34k     $17.34  $4.2
+session     reqs      read     w5m     w1h      out   ctx_max     cost  cost@cap
+main         440   166.03M       0   1.39M     397k      755k    26.12     13.73
+agent-a642    48    31.83M   5.52M      38      34k      803k    17.34      4.45
 ...
-TOTAL       705   344.5M    8.66M      630k     $64.51  $31.7
+TOTAL        701   344.53M   7.27M   1.40M     630k      803k    64.51     24.19
 ```
 
-Además: la statusline ya muestra `ctx remaining %`; conviene añadir el coste
-acumulado si se quiere ver en vivo. OTel queda para cuando haya varias máquinas:
-es lo único que da tokens por subagente en tiempo casi real.
+Also: the status line already shows `ctx remaining %`; adding cumulative cost
+would make the live view complete. OTel is for when there are several machines:
+it is the only thing that gives tokens per subagent in near real time.
 
-### 3.8 Revisión del plugin `context-mode` — prioridad 1
+### 3.8 `context-mode` plugin review — priority 1
 
-`SessionStart:resume` inyectó **146.512 bytes** (~40k tokens) y `PreToolUse:Agent`
-65.277 bytes en 6 eventos. El script `~/.claude/hooks/context-mode-cache-heal.mjs`
-es un auto-heal, no el inyector: el contenido sale del plugin
-`context-mode@context-mode` (`~/.claude/context-mode/`).
+`SessionStart:resume` injected **146,512 bytes** (~40k tokens) and
+`PreToolUse:Agent` 65,277 bytes over 6 events. The script
+`~/.claude/hooks/context-mode-cache-heal.mjs` is a self-heal, not the injector:
+the content comes from the `context-mode@context-mode` plugin
+(`~/.claude/context-mode/`).
 
-Propuesta: medirlo una semana con el plugin apagado. Si no se echa de menos, se
-queda apagado. Si se echa de menos, se busca cuál de sus hooks emite los 146 KB y
-se recorta ese, no el plugin entero.
+Proposal: measure it for a week with the plugin off. If it is not missed, it stays
+off. If it is, find which of its hooks emits the 146 KB and trim that one rather
+than the whole plugin.
 
-### 3.9 Hábitos — prioridad 2
+### 3.9 Habits — priority 2
 
-1. `/clear` en cada corte de repositorio o de tarea. Es gratis y es el mayor
-   ahorro por unidad de esfuerzo.
-2. No pegar terminal de la VM en el chat: 15 pastes fueron ~52k tokens
-   permanentes. Alternativas: que el agente ejecute el comando, o escribir la
-   salida a un archivo y leer un rango acotado.
-3. Sondeo: `<5 min` o `>60 min`. La franja 5–60 es el peor caso posible.
+1. `/clear` at every repository or task boundary. It is free and it is the biggest
+   saving per unit of effort.
+2. Do not paste VM terminal output into the chat: 15 pastes were ~52k permanent
+   tokens. Alternatives: have the agent run the command, or write the output to a
+   file and read a bounded range.
+3. Polling: `<5 min` or `>60 min`. The 5–60 band is the worst possible case.
 
-## 4. Fases
+## 4. Phases
 
-| Fase | Qué | Esfuerzo | Resultado |
+| Phase | What | Effort | Outcome |
 |---|---|---|---|
-| 0 | Settings de §3.1 y §3.2 + `audit-session-cost.py` | 30 min | Techo de contexto y medición reproducible |
-| 1 | Hooks §3.3.1 y §3.3.2 | 45 min | Los dos casos caros quedan imposibles |
-| 2 | Subagente §3.5 + skill §3.4 | 45 min | El trabajo de benchmark deja de necesitar forks |
-| 3 | Hooks §3.3.3 a §3.3.5 + auditoría del plugin §3.8 | 45 min | Contrato de salida, sondeos cortos, plugin decidido |
-| 4 | `AGENTS.md` §3.6 + OTel si hace falta | 20 min | Criterio explícito y telemetría |
+| 0 | Settings from §3.1 and §3.2 + `audit-session-cost.py` | 30 min | Context ceiling and reproducible measurement |
+| 1 | Hooks §3.3.1 and §3.3.2 | 45 min | Both expensive cases become impossible |
+| 2 | Subagent §3.5 + skill §3.4 | 45 min | Benchmark work no longer needs forks |
+| 3 | Hooks §3.3.3 to §3.3.5 + plugin audit §3.8 | 45 min | Output contract, short polls, plugin decided |
+| 4 | `AGENTS.md` §3.6 + OTel if needed | 20 min | Explicit judgement and telemetry |
 
-## 5. Criterios de salida
+## 5. Exit criteria
 
-- [ ] Una sesión de benchmark de 6 h termina por debajo de **$20** (línea base: $66,83).
-- [ ] Ninguna sesión abre un fork con el contexto por encima de 150k.
-- [ ] Ninguna lectura de `*.output` ni de transcripts llega al contexto.
-- [ ] `audit-session-cost.py` reproduce los totales de `cost-state` con un error < 5%
-      (la diferencia por deduplicación documentada en el review es ~3,5%).
-- [ ] El arranque de una sesión nueva no inyecta más de ~10k tokens de hooks.
-- [ ] Revisión a las dos semanas con los mismos comandos del review §9.
+- [ ] A six-hour benchmark session ends below **$20** (baseline: $66.83).
+- [ ] No session opens a fork with the context above 150k.
+- [ ] No read of a `*.output` or a transcript reaches the context.
+- [ ] `audit-session-cost.py` reproduces the `cost-state` totals within 5%
+      (the deduplication difference documented in the audit is ~3.5%).
+- [ ] Starting a new session injects no more than ~10k tokens of hooks.
+- [ ] Review at two weeks with the same commands as audit §9.
 
-## 6. Ahorro estimado
+## 6. Estimated saving
 
-| Pieza | Ahorro | Se solapa con |
+| Piece | Saving | Overlaps with |
 |---|---|---|
-| `autoCompactWindow: 200000` | ~$22–25 | lectura de los forks (que heredan menos) |
+| `autoCompactWindow: 200000` | ~$22–25 | fork reads (they inherit less) |
 | `subagentPromptCacheTtl: "1h"` | ~$12–14 | — |
-| No forkear en profundidad | ~$16 solo en `a642592f`; hasta $38 con los seis | ventana |
-| Cadencia `<5` o `>60` | ~$12 en el caso del sondeo | TTL 1 h (ambos evitan el mismo rebuild) |
-| Menos pastes y más `/clear` | ~$10–20 | ventana |
+| Not forking at depth | ~$16 on `a642592f`; up to $38 across the six | the window |
+| Cadence `<5` or `>60` | ~$12 in the polling case | the 1h TTL (both avoid the same rebuild) |
+| Fewer pastes and more `/clear` | ~$10–20 | the window |
 
-No son aditivos: el contrafactual calculado con el tope de 200k deja la sesión en
-**~$32**, y eliminando además los forks, en **~$20–25**. Cifra de trabajo:
-**la mitad o un tercio de la factura actual**, sin tocar el modelo ni la calidad
-del trabajo.
+They are not additive: the calculated counterfactual with the 200k ceiling leaves
+the session at **~$32**, and removing the forks as well at **~$20–25**. Working
+figure: **half to a third of the current bill**, without touching the model or the
+quality of the work.
 
-## 7. Riesgos
+## 7. Risks
 
-| Riesgo | Mitigación |
+| Risk | Mitigation |
 |---|---|
-| Un hook lento frena cada llamada a herramienta | `jq` puro, sin red, `timeout: 5`, `matcher` estrecho |
-| El guardrail de forks bloquea un caso legítimo | El mensaje de `deny` explica la alternativa; se sube `DEEP_FORK_LIMIT` por sesión |
-| La compactación a 200k pierde contexto útil | `/compact Focus on …` antes de un corte; subir el techo por proyecto con `/autocompact` |
-| `autoCompactWindow` global afecta a proyectos que necesitan más | Override por sesión con `--autocompact` o `/autocompact` |
-| Recortar salidas (`PostToolUse`) esconde errores | No se activa por defecto; solo en la lista blanca de §3.3.6 |
-| Sobrecargar `AGENTS.md` | Tres líneas; el resto va a hooks o settings |
+| A slow hook delays every tool call | Pure `jq`, no network, `timeout: 5`, narrow `matcher` |
+| The fork guardrail blocks a legitimate case | The `deny` message explains the alternative; raise `DEEP_FORK_LIMIT` per session |
+| Compacting at 200k loses useful context | `/compact Focus on …` before a boundary; raise the ceiling per project with `/autocompact` |
+| A global `autoCompactWindow` affects projects that need more | Override per session with `--autocompact` or `/autocompact` |
+| Trimming outputs (`PostToolUse`) hides errors | Not enabled by default; only on the allowlist in §3.3.6 |
+| Overloading `AGENTS.md` | Three lines; the rest goes into hooks or settings |
 
-## 8. Preguntas abiertas
+## 8. Open questions
 
-1. ¿`CLAUDE_CODE_FORK_SUBAGENT=0` permanente, o solo el guardrail de profundidad?
-   La primera opción es más barata y quita una decisión al agente; la segunda
-   conserva el fork para casos donde el historial sí hace falta.
-2. ¿`autoCompactWindow` global o por proyecto? Global es más simple; por proyecto
-   respeta repos con contexto legítimamente largo.
-3. ¿El plugin `context-mode` aporta lo suficiente para sus 40k tokens por resume?
-4. ¿Vale la pena OTel ahora, o alcanza con `audit-session-cost.py` mientras haya
-   una sola máquina?
+1. `CLAUDE_CODE_FORK_SUBAGENT=0` permanently, or only the depth guardrail? The
+   first is cheaper and removes a decision from the agent; the second keeps the
+   fork for cases where the history is genuinely needed.
+2. `autoCompactWindow` global or per project? Global is simpler; per project
+   respects repositories with legitimately long context.
+3. Does the `context-mode` plugin earn its 40k tokens per resume?
+4. Is OTel worth it now, or is `audit-session-cost.py` enough while there is a
+   single machine?

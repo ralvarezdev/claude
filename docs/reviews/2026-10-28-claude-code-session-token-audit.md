@@ -5,279 +5,286 @@ date: 2026-10-28
 related: []
 ---
 
-# Auditoría: por qué dos sesiones de Claude Code costaron $66.83 y $28.50 (2026-10-28)
+# Audit: why two Claude Code sessions cost $66.83 and $28.50 (2026-10-28)
 
-Escrito 2026-10-28. Origen: la sospecha de que una sesión de Claude Code en
-`automation-labs-openhands-plc` había consumido ~800.000 tokens "en 10 minutos" por una fuga de logs de
-un subagente. La sospecha era incorrecta en el mecanismo y en la magnitud temporal.
-Este documento registra qué se midió, qué se descartó y qué queda por cambiar.
+Written 2026-10-28. Origin: the suspicion that a Claude Code session in
+`automation-labs-openhands-plc` had consumed ~800,000 tokens "in 10 minutes"
+through a log leak from a subagent. The suspicion was wrong about the mechanism
+and about the time frame. This document records what was measured, what was
+ruled out, and what is left to change.
 
-"Leído" significa leído en el transcript o en el `cost-state` de la sesión;
-"calculado" significa derivado de esos registros; "estimado" significa una
-proyección con supuestos declarados. Nada se cambió en el entorno durante la
-auditoría.
+"Read" means read from the transcript or the session's `cost-state`;
+"calculated" means derived from those records; "estimated" means a projection
+whose assumptions are stated. Nothing was changed in the environment during the
+audit.
 
-## 1. Método
+## 1. Method
 
-Todo sale de los transcripts locales que Claude Code escribe en
-`~/.claude/projects/<proyecto>/<sesión>.jsonl` y en el subdirectorio
-`<sesión>/subagents/`. Cada registro `assistant` lleva el `usage` real de la API
-(`input_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`,
-`output_tokens` y el desglose `ephemeral_1h` / `ephemeral_5m`), y cada sesión
-cierra con un registro `cost-state` que declara el total.
+Everything comes from the local transcripts Claude Code writes to
+`~/.claude/projects/<project>/<session>.jsonl` and to the
+`<session>/subagents/` subdirectory. Every `assistant` record carries the real
+API `usage` (`input_tokens`, `cache_read_input_tokens`,
+`cache_creation_input_tokens`, `output_tokens` and the `ephemeral_1h` /
+`ephemeral_5m` split), and every session closes with a `cost-state` record that
+declares the total.
 
-Sesiones auditadas:
+Sessions audited:
 
-| Sesión | Proyecto | Archivo |
+| Session | Project | File |
 |---|---|---|
-| `01a5c123-d98d-4d1b-89b6-2241604af590` | `automation-labs-openhands-plc` | 7,0 MB, 2.862 líneas |
+| `01a5c123-d98d-4d1b-89b6-2241604af590` | `automation-labs-openhands-plc` | 7.0 MB, 2,862 lines |
 | `bd4861f2-42da-470f-a8ba-c373f12875c5` | `automation-labs-openevolve` | 18 MB |
 
-Entorno leído: Claude Code `2.1.310`, modelo `claude-sonnet-5-5` (ventana nativa
-de 1M), `querySource: sdk` (camino ACP desde Zed), `effort: medium`.
+Environment read: Claude Code `2.1.310`, model `claude-sonnet-5-5` (native 1M
+window), `querySource: sdk` (the ACP path from Zed), `effort: medium`.
 
-## 2. Los números
+## 2. The numbers
 
-| | openhands-plc (principal) | openhands-plc (6 forks) | openevolve |
+| | openhands-plc (main) | openhands-plc (6 forks) | openevolve |
 |---|---|---|---|
-| Peticiones | 440 | 265 | 353 |
-| `cache_read` | 166,03 M | 178,50 M | 191,92 M |
-| Escrituras 1 h | 1,39 M | 0,01 M | 0,83 M |
-| Escrituras 5 m | 0 | **7,27 M** | 0 |
-| Output | 397 k | 233 k | 593 k |
-| Contexto mín → máx | 37.709 → 754.654 | 617 k → **802.674** | 33.112 → **841.451** |
-| Duración de pared | — | — | 7,3 h |
-| **Coste** | **$26,12** | **$38,39** | **$28,50** |
+| Requests | 440 | 265 | 353 |
+| `cache_read` | 166.03M | 178.50M | 191.92M |
+| 1h writes | 1.39M | 0.01M | 0.83M |
+| 5m writes | 0 | **7.27M** | 0 |
+| Output | 397k | 233k | 593k |
+| Context min → max | 37,709 → 754,654 | 617k → **802,674** | 33,112 → **841,451** |
+| Wall time | — | — | 7.3 h |
+| **Cost** | **$26.12** | **$38.39** | **$28.50** |
 
-`cost-state` de la sesión de `openhands-plc`: **$66,83**, con 366.574.046 tokens de
-lectura de caché, 8.751.538 de escritura y 600.034 de output, en 7 h 21 min de
-pared y 1 h 48 min de API.
+`cost-state` for the `openhands-plc` session: **$66.83**, with 366,574,046 cache
+read tokens, 8,751,538 cache creation tokens and 600,034 output tokens, over
+7 h 21 min of wall time and 1 h 48 min of API time.
 
-Los costes de la tabla son recalculados por petición y suman $64,51 frente a los
-$66,83 declarados; la diferencia (~3,5%) es la deduplicación descrita en §10. Las
-proporciones y las comparaciones entre objetos se mantienen.
+The costs in the table are recomputed per request and add up to $64.51 against
+the $66.83 declared; the ~3.5% difference is the deduplication described in
+§10. The proportions and the comparisons between objects hold.
 
-Dos observaciones que ordenan todo lo demás:
+Two observations order everything else:
 
-1. **Las dos conversaciones principales costaron casi lo mismo** (~$26–28, con la
-   misma forma). `openevolve` llegó incluso a un contexto mayor (841 k frente a
-   754 k).
-2. **Toda la diferencia son los forks**: $38,39, el 57% de la sesión de
-   `openhands-plc`.
+1. **The two main conversations cost almost the same** (~$26–28, same shape).
+   `openevolve` even reached a larger context (841k against 754k).
+2. **The whole difference is the forks**: $38.39, 57% of the `openhands-plc`
+   session.
 
-El pico de `openevolve`, que es la sesión "que volaba en una hora", fue
-**18:00–19:00Z**: $6,50 con 68 peticiones y un contexto de 781 k, y dentro de esa
-hora el tramo más caro fue 18:10–18:20 (26 peticiones, 18,9 M tokens leídos,
-$1,89 en diez minutos). No hubo nada anómalo ahí: es la misma aritmética de §3,
-sin forks que la amplifiquen. A modo de contraste, la hora 15 de la misma sesión
-costó $0,28 con 5 peticiones.
+The `openevolve` peak — the session people remember as "the hour that flew" — was
+**18:00–19:00Z**: $6.50 over 68 requests at a 781k context, and inside that hour
+the most expensive stretch was 18:10–18:20 (26 requests, 18.9M tokens read,
+$1.89 in ten minutes). Nothing anomalous there: it is the same arithmetic as §3,
+without forks to amplify it. The 15:00 hour of the same session cost $0.28 over
+5 requests.
 
-Desglose del coste de la sesión cara (calculado):
+Breakdown of the expensive session (calculated):
 
-| Componente | Tokens | Precio | Coste | % |
+| Component | Tokens | Price | Cost | % |
 |---|---|---|---|---|
-| Lecturas de caché | 366,6 M | $0,10/M | $36,66 | 55% |
-| Escrituras 5 m (forks) | 7,27 M | $2,50/M | $18,18 | 27% |
-| Escrituras 1 h (principal) | 1,39 M | $4,00/M | $5,58 | 8% |
-| Output | 0,60 M | $10/M | $6,00 | 9% |
+| Cache reads | 366.6M | $0.10/M | $36.66 | 55% |
+| 5m writes (forks) | 7.27M | $2.50/M | $18.18 | 27% |
+| 1h writes (main) | 1.39M | $4.00/M | $5.58 | 8% |
+| Output | 0.60M | $10/M | $6.00 | 9% |
 
-## 3. El mecanismo: coste = Σ contexto
+## 3. The mechanism: cost = Σ context
 
-Cada turno reenvía el contexto completo. El coste total no es
-`contexto × turnos` sino la suma del contexto de cada turno, y como el contexto
-crece con los turnos, el resultado es cuadrático en la duración de la sesión.
+Every turn re-sends the whole context. The total cost is not
+`context × turns` but the sum of the context over the turns, and because the
+context grows with the turns, the result is quadratic in the length of the
+session.
 
-Contexto del hilo principal de `openhands-plc` por décimos de la sesión (leído):
+Context of the `openhands-plc` main thread, sampled every tenth of the session
+(read):
 
 ```
-req   1 (12:41)   37.709
-req  89 (13:35)  176.070
-req 177 (13:55)  269.546
-req 265 (15:31)  440.188
-req 353 (17:04)  605.846
-req 440 (20:02)  754.654
+req   1 (12:41)   37,709
+req  89 (13:35)  176,070
+req 177 (13:55)  269,546
+req 265 (15:31)  440,188
+req 353 (17:04)  605,846
+req 440 (20:02)  754,654
 ```
 
-Consecuencia práctica: **un turno con 754 k de contexto cuesta $0,075 — lo mismo
-que una sesión nueva de 30 turnos desde cero**. El descuento del caché (0,05x en
-Sonnet 5.5) no sustituye acotar el contexto; abarata un número que ya era enorme.
+The practical consequence: **one turn at 754k costs $0.075 — the same as a fresh
+30-turn session from zero**. The cache discount (0.05x on Sonnet 5.5) is not a
+substitute for bounding the context; it makes a number that was already large
+cheaper.
 
-Contrafactual calculado, recalculando cada petición con el contexto topado en
-200 k:
+Calculated counterfactual, recomputing every request with the context capped at
+200k:
 
-| | Lectura real | Con tope 200 k | Factor |
+| | Actual reads | Capped at 200k | Factor |
 |---|---|---|---|
-| Principal | 167,4 M | 80,7 M | 2,1x |
-| Fork `a642592f` | 37,4 M | 9,6 M | 3,9x |
-| Fork `abb9cae3` | 75,6 M | 22,2 M | 3,4x |
-| Resto de forks | 72,8 M | 20,4 M | 3,5x |
-| **Total** | **353,2 M** | **132,9 M** | **2,7x** |
+| Main | 167.4M | 80.7M | 2.1x |
+| Fork `a642592f` | 37.4M | 9.6M | 3.9x |
+| Fork `abb9cae3` | 75.6M | 22.2M | 3.4x |
+| Other forks | 72.8M | 20.4M | 3.5x |
+| **Total** | **353.2M** | **132.9M** | **2.7x** |
 
-Solo en lecturas: $35,32 → $13,29. Con escrituras y output, la sesión habría
-quedado en ~$32 en lugar de $66,83.
+Reads alone: $35.32 → $13.29. Including writes and output, the session would have
+landed at ~$32 instead of $66.83.
 
-## 4. Los forks: qué son y cuáles hubo
+## 4. Forks: what they are and which ones ran
 
-Un **fork** es un subagente que hereda la conversación completa — system prompt,
-herramientas, modelo e historial — en vez de arrancar con contexto limpio. Sus
-llamadas a herramientas no entran en el hilo principal, pero **su contexto sí es
-una copia, no una referencia**. El modo fork viene activado por defecto: Claude
-puede crear forks por su cuenta, y así ocurrió aquí (no hubo `/subtask`).
+A **fork** is a subagent that inherits the whole conversation — system prompt,
+tools, model and history — instead of starting with a clean context. Its tool
+calls stay out of the main thread, but **its context is a copy, not a reference**.
+Fork mode is on by default: Claude can create forks on its own, and that is what
+happened here (no `/subtask` was used).
 
-`openevolve`: **cero forks**. No existe el directorio `subagents/` y hay 0
-llamadas a `Agent` en 353 peticiones (271 `Bash`, 16 `Read`).
+`openevolve`: **zero forks**. There is no `subagents/` directory and there are 0
+`Agent` calls across 353 requests (271 `Bash`, 16 `Read`).
 
-`openhands-plc`: seis forks, todos `agentType: "fork"`, `model: inherit`.
+`openhands-plc`: six forks, all `agentType: "fork"`, `model: inherit`.
 
-| Fork | Inicio (Z) | Fin (Z) | Dur. | Req | Coste |
+| Fork | Start (Z) | End (Z) | Dur. | Req | Cost |
 |---|---|---|---|---|---|
-| `abb9cae3` | 16:40:17 | 17:03:54 | 24 min | 111 | $8,94 |
-| `ae4e49d2` | 16:40:25 | 16:42:16 | 2 min | 11 | $0,90 |
-| `a64f02a6` | 17:33:26 | 17:41:41 | 8 min | 26 | $2,05 |
-| `a1e0eb66` | 17:48:04 | 18:29:09 | 41 min | 37 | $6,46 |
-| `add42bf5` | 18:36:40 | 18:42:39 | 6 min | 28 | $2,67 |
-| **`a642592f`** | **18:45:27** | **20:01:08** | **76 min** | **48** | **$17,34** |
+| `abb9cae3` | 16:40:17 | 17:03:54 | 24 min | 111 | $8.94 |
+| `ae4e49d2` | 16:40:25 | 16:42:16 | 2 min | 11 | $0.90 |
+| `a64f02a6` | 17:33:26 | 17:41:41 | 8 min | 26 | $2.05 |
+| `a1e0eb66` | 17:48:04 | 18:29:09 | 41 min | 37 | $6.46 |
+| `add42bf5` | 18:36:40 | 18:42:39 | 6 min | 28 | $2.67 |
+| **`a642592f`** | **18:45:27** | **20:01:08** | **76 min** | **48** | **$17.34** |
 
-El fork `a642592f` — el mismo `agentId` que aparecía en la alerta original — costó
-el 26% de la sesión completa en 76 minutos. Su primera petición leyó 745.037
-tokens del caché del padre: **no llegó a 800 k leyendo logs, nació en 745 k**
-porque el padre ya estaba ahí. El máximo de 802.674 es herencia más trabajo propio.
+The `a642592f` fork — the same `agentId` that appeared in the original alert —
+cost 26% of the entire session in 76 minutes. Its first request read 745,037
+tokens from the parent's cache: **it did not reach 800k by reading logs, it was
+born at 745k** because the parent was already there. The 802,674 maximum is
+inheritance plus its own work.
 
-Regla que sale de esto: el fork es proporcional al contexto del padre. Con el padre
-en 40 k es un atajo; con el padre en 745 k es una segunda sesión completa a tu
-cargo. Umbral práctico: **por encima de ~150 k, delegar con subagente fresco y un
-brief explícito, no con fork**.
+The rule that follows: a fork is proportional to the parent's context. With the
+parent at 40k it is a shortcut; with the parent at 745k it is a second full
+session on your bill. Practical threshold: **above ~150k, delegate to a fresh
+subagent with an explicit brief, not to a fork**.
 
-## 5. El TTL de 5 minutos: cuánto explicó
+## 5. The 5-minute TTL: how much it explains
 
-Explica $18 de $67, todo en los forks. El hilo principal corría con `ttl: "1h"`
-desde el inicio y tuvo **un solo** fallo de caché por expiración en 7 horas (el
-hueco de 76 minutos entre 18:45 y 20:01, que reescribió 736.876 tokens, $2,95).
+It explains $18 of the $67, all of it inside the forks. The main thread ran with
+`ttl: "1h"` from the start and had **one** expiry-driven cache miss in seven
+hours (the 76-minute gap between 18:45 and 20:01, which rewrote 736,876 tokens,
+$2.95).
 
-La huella del TTL, leída en `a642592f`:
+The TTL fingerprint, read from `a642592f`:
 
-| Hora | `cache_read` | `cache_creation` |
+| Time | `cache_read` | `cache_creation` |
 |---|---|---|
-| 18:49:13 | 778.215 | 904 |
-| 18:55:12 | 14.592 | 765.120 |
-| 19:01:38 | 14.592 | 766.331 |
-| 19:07:37 | 800.378 | 598 |
-| 19:17:33 | 14.592 | 786.796 |
-| 19:27:32 | 14.592 | 787.117 |
-| 19:37:28 | 14.592 | 787.438 |
-| 19:47:32 | 14.592 | 787.759 |
-| 19:57:32 | 14.592 | 788.080 |
+| 18:49:13 | 778,215 | 904 |
+| 18:55:12 | 14,592 | 765,120 |
+| 19:01:38 | 14,592 | 766,331 |
+| 19:07:37 | 800,378 | 598 |
+| 19:17:33 | 14,592 | 786,796 |
+| 19:27:32 | 14,592 | 787,117 |
+| 19:37:28 | 14,592 | 787,438 |
+| 19:47:32 | 14,592 | 787,759 |
+| 19:57:32 | 14,592 | 788,080 |
 
-Cadencia de exactamente 10 minutos, TTL de 5 minutos, 787 k reescritos en cada
-disparo. Regla general: **cualquier intervalo entre el TTL y su doble es el peor
-caso posible** — garantiza el fallo sin amortizar la escritura de 1 h. O menos de
-5 min (`/loop 5m` dispara a los 4m45s a propósito), o más de 60.
+Exactly ten-minute spacing, a five-minute TTL, 787k rewritten on every fire. The
+general rule: **any interval between the TTL and twice the TTL is the worst
+possible case** — it guarantees the miss without amortising the one-hour write.
+Either under 5 minutes (`/loop 5m` fires at 4m45s on purpose) or over 60.
 
-## 6. Qué se descartó
+## 6. What was ruled out
 
-| Hipótesis | Veredicto | Evidencia |
+| Hypothesis | Verdict | Evidence |
 |---|---|---|
-| Fuga del JSONL del subagente al hilo principal vía ACP | **Falsa** | 1 sola llamada a `Read` en 7 h; 366 `Bash`; los 4 comandos que tocaron un `.output` fueron `cat … \| tail -3 \| cut -c-200`. ACP no transporta tráfico al modelo. |
-| El proxy ACP absorbió la salida del subagente | **Falsa** | El proceso habla con la API directamente (`querySource: sdk`, `cacheControl` propio). |
-| Mutación del entorno invalidó el prefijo del caché | **Falsa** | 440/440 peticiones del principal con `cache_read > 0`: cero fallos. Editar archivos no invalida el prefijo; solo lo que está antes del breakpoint. |
-| El bucle de 10 min disparó el consumo del hilo principal | **Falsa en el principal, cierta en un fork** | El principal no tenía bucle; el patrón de 10 min aparece solo dentro de `a642592f`, de 18:55 a 19:57. |
-| 14 pruebas en paralelo | **Falsa** | 6 forks en 5 oleadas (dos solapados a las 16:40) y ~9 tareas de `Bash` en segundo plano. |
+| The subagent JSONL leaked into the main thread through ACP | **False** | One `Read` call in seven hours against 366 `Bash` calls; the four commands that touched a `.output` were `cat … \| tail -3 \| cut -c-200`. ACP does not carry model traffic. |
+| The ACP proxy absorbed the subagent's output | **False** | The process talks to the API directly (`querySource: sdk`, its own `cacheControl`). |
+| Environment mutation invalidated the cache prefix | **False** | 440 of 440 main-thread requests had `cache_read > 0`: zero misses. Editing files does not invalidate the prefix; only what sits before the breakpoint does. |
+| The 10-minute loop drove the main thread's consumption | **False in the main thread, true in one fork** | The main thread had no loop; the 10-minute pattern appears only inside `a642592f`, from 18:55 to 19:57. |
+| 14 trials in parallel | **False** | Six forks in five waves (two overlapping at 16:40) and ~9 background `Bash` tasks. |
 
-## 7. De dónde salió el contexto de 754 k
+## 7. Where the 754k of context came from
 
-Composición medida (caracteres → tokens aproximados):
+Measured composition (characters → approximate tokens):
 
-| Componente | Medida | ~Tokens |
+| Component | Measure | ~Tokens |
 |---|---|---|
-| Thinking retenido | 213.574 declarados en `cost-state` | 213.574 |
-| Salidas de `Bash` | 553.353 chars / 366 llamadas | ~150.000 |
-| Hooks | 272.000 chars / 77 eventos | ~80.000 |
-| System prompt, tools, skills, CLAUDE.md | — | ~90.000 |
-| Pastes manuales del usuario | 156.932 chars / 15 pastes | ~52.000 |
-| Texto del asistente e inputs de tools | 97.000 chars | ~28.000 |
+| Retained thinking | 213,574 declared in `cost-state` | 213,574 |
+| `Bash` output | 553,353 chars / 366 calls | ~150,000 |
+| Hooks | 272,000 chars / 77 events | ~80,000 |
+| System prompt, tools, skills, CLAUDE.md | — | ~90,000 |
+| Manual user pastes | 156,932 chars / 15 pastes | ~52,000 |
+| Assistant text and tool inputs | 97,000 chars | ~28,000 |
 
-Dos detalles que no se ven leyendo el transcript por encima:
+Two details that do not show up when reading the transcript casually:
 
-- Los 420 bloques de thinking están guardados con `"thinking": ""` y solo la
-  `signature`. El texto no está, pero sí está en el contexto: cada petición lleva
+- The 420 thinking blocks are stored with `"thinking": ""` and only the
+  `signature`. The text is not there, but it is in the context: every request
+  carries
   `context_management: {"edits": [{"type": "clear_thinking_20251015", "keep": "all"}]}`.
-  Nunca se limpia, así que es el mayor contribuyente individual y es invisible en
-  una auditoría basada en caracteres.
-- El mayor salto en un solo turno en 7 horas fue **+22.089 tokens** (2,9% del
-  total), y fue un paste de 46.087 caracteres de una transcripción de terminal de
-  la VM. No hubo ningún pico: hubo una integral.
+  It is never cleared, which makes it the largest single contributor and
+  invisible to a character-based audit.
+- The largest single-turn jump in seven hours was **+22,089 tokens** (2.9% of the
+  total), and it was a 46,087-character paste of a VM terminal transcript. There
+  was no spike: there was an integral.
 
-Hooks que inyectaron contexto en el principal: `PreToolUse:Agent` 65.277 bytes en
-6 eventos, `Stop` 20.637 bytes en 67 eventos, `SessionStart:startup` 5.247 bytes.
-Queda además un `SessionStart:resume` de **146.512 bytes** que se disparó al
-final: si esa sesión se retoma, inyecta ~40 k tokens en un contexto que ya está
-en 750 k.
+Hooks that injected context into the main thread: `PreToolUse:Agent` 65,277 bytes
+over 6 events, `Stop` 20,637 bytes over 67 events, `SessionStart:startup` 5,247
+bytes. A `SessionStart:resume` hook of **146,512 bytes** also fired at the end:
+resuming that session would inject ~40k tokens into a context already at 750k.
 
-## 8. Recomendaciones
+## 8. Recommendations
 
-Ordenadas por ahorro estimado, con el efecto calculado sobre esta sesión:
+Ordered by estimated saving, with the effect calculated on this session:
 
-1. **`autoCompactWindow: 200000`** — ahorro ~$22–25. Es la palanca mayor: acota las
-   lecturas del principal y, en cascada, el contexto que hereda cada fork. El
-   default sobre un modelo de 1M compacta cerca de 950 k, así que la protección
-   existía y nunca llegó a activarse.
-2. **`subagentPromptCacheTtl: "1h"`** — ahorro ~$12–14. Convierte los ~10 rebuilds
-   de 787 k en una escritura más lecturas. Break-even en el segundo sondeo. La
-   clave equivalente en el frontmatter de un agente es
-   `experimental.cacheTtl: 1h`.
-3. **No forkear con el padre profundo** — ahorro ~$16 solo en `a642592f`. Por
-   encima de ~150 k de contexto en el padre, delegar con subagente fresco.
-4. **Cadencia de sondeo: nunca entre 5 y 60 minutos.** `<5 min` o `>60 min`.
-5. **Auditar los hooks**: 272 KB de `hook_success` es tanto texto como las 366
-   llamadas a `Bash` juntas, y una vez inyectado es permanente.
-6. **Descartar `.claudeignore`**: no existe en Claude Code. Para bloquear rutas es
-   `permissions.deny` con reglas con scope (`Read(//tmp/claude-*/**)`), que no
-   invalidan el prefijo; una regla desnuda (`"Read"`) sí lo invalida.
+1. **`autoCompactWindow: 200000`** — saves ~$22–25. The biggest lever: it bounds
+   the main thread's reads and, in cascade, the context every fork inherits. The
+   default on a 1M model compacts near 950k, so the protection existed and never
+   triggered.
+2. **`subagentPromptCacheTtl: "1h"`** — saves ~$12–14. Turns the ~10 rebuilds of
+   787k into one write plus reads. Break-even on the second poll. The equivalent
+   key in an agent's frontmatter is `experimental.cacheTtl: 1h`.
+3. **Do not fork with a deep parent** — saves ~$16 on `a642592f` alone. Above
+   ~150k of parent context, delegate to a fresh subagent.
+4. **Poll interval: never between 5 and 60 minutes.** Under 5 or over 60.
+5. **Audit the hooks**: 272 KB of `hook_success` is as much text as the 366
+   `Bash` calls combined, and once injected it is permanent.
+6. **Drop `.claudeignore`**: it does not exist in Claude Code. To block paths,
+   use `permissions.deny` with scoped rules (`Read(//tmp/claude-*/**)`), which do
+   not invalidate the prefix; a bare rule (`"Read"`) does.
 
-Todas las claves requieren un build ≥ 2.1.296 y existen en 2.1.310, así que no hay
-riesgo de que se ignoren en silencio.
+All of these keys require a build ≥ 2.1.296 and exist in 2.1.310, so there is no
+risk of them being ignored silently.
 
-## 9. Cómo repetir la medición
+## 9. How to repeat the measurement
 
-El total autoritativo de una sesión:
+The authoritative total for a session:
 
 ```bash
-jq -c 'select(.type=="cost-state") | {totalCostUSD, modelUsage}' <sesión>.jsonl
+jq -c 'select(.type=="cost-state") | {totalCostUSD, modelUsage}' <session>.jsonl
 ```
 
-El perfil por petición, que distingue volumen de fallos de caché:
+The per-request profile, which separates volume from cache misses:
 
 ```bash
 jq -r 'select(.type=="assistant" and .message.usage!=null)
   | [.timestamp, .message.id,
      .message.usage.cache_read_input_tokens,
      .message.usage.cache_creation_input_tokens,
-     .message.usage.output_tokens] | @tsv' <sesión>.jsonl \
+     .message.usage.output_tokens] | @tsv' <session>.jsonl \
 | awk '!seen[$2]++'
 ```
 
-Firmas de lectura:
+Reading the signatures:
 
-- `cache_creation` ≈ tamaño del contexto y `cache_read` ≈ 14 k, repetido cada
-  N minutos → expiración de TTL.
-- `cache_read` ≈ contexto de forma sostenida → caché sano, gasto por volumen.
-- Un salto de contexto de decenas de miles en un turno → contenido inyectado
-  (paste, hook o lectura de archivo), no acumulación.
+- `cache_creation` ≈ the context size and `cache_read` ≈ 14k, repeating every N
+  minutes → TTL expiry.
+- `cache_read` ≈ the context size, sustained → healthy cache, spend driven by
+  volume.
+- A context jump of tens of thousands in one turn → injected content (a paste, a
+  hook, a file read), not accumulation.
 
-Los forks se miden aparte, en `<sesión>/subagents/agent-*.jsonl`, con el mismo
-comando. `cost-state` **no** incluye el desglose por fork en un solo campo: hay
-que sumar los transcripts de `subagents/`.
+Forks are measured separately, in `<session>/subagents/agent-*.jsonl`, with the
+same command. `cost-state` **does not** break the total down per fork: the
+`subagents/` transcripts have to be summed.
 
-## 10. Límites de este análisis
+## 10. Limits of this analysis
 
-- Los totales salen de `cost-state`; los repartos por hora y por fork son
-  recalculados y subestiman ~3,5% (openhands-plc) y ~14% (openevolve) respecto al
-  total, porque se deduplican escrituras parciales del streaming. Las
-  proporciones se mantienen; los totales oficiales mandan.
-- El thinking está redactado en el transcript (`thinking: ""` + `signature`), así
-  que su peso se toma de `cost-state`, no de medir caracteres.
-- No se contrastó con la factura real de Anthropic. Los precios usados son los de
-  lista de Sonnet 5.5: $2/M base, $0,10/M lectura de caché (0,05x), $2,50/M
-  escritura 5 m (1,25x), $4/M escritura 1 h (2x), $10/M output.
-- `advisorModel: claude-opus-5-5` aparece en los registros; no se pudo aislar si
-  generó peticiones facturables adicionales fuera de los `modelUsage` leídos.
+- Totals come from `cost-state`; the per-hour and per-fork splits are recomputed
+  and undercount by ~3.5% (openhands-plc) and ~14% (openevolve) against the
+  total, because partial streaming writes are deduplicated. The proportions hold;
+  the official totals govern.
+- Thinking is redacted in the transcript (`thinking: ""` plus a `signature`), so
+  its weight is taken from `cost-state` rather than measured in characters.
+- This was not reconciled against an Anthropic invoice. The prices used are
+  Sonnet 5.5 list prices: $2/M base, $0.10/M cache read (0.05x), $2.50/M 5m write
+  (1.25x), $4/M 1h write (2x), $10/M output.
+- `advisorModel: claude-opus-5-5` appears in the records; it could not be
+  isolated whether it produced additional billable requests outside the
+  `modelUsage` read.

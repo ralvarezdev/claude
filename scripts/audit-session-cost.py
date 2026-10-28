@@ -224,20 +224,20 @@ def render(buckets: list[Bucket], cap: int, session: str, cost_state: dict | Non
 
     print()
     if cap:
-        print(f"cost@cap: proyección escalando el coste por la razón entre el contexto topado "
-              f"a {human(cap)} y el real. Supone que escrituras y output no cambian; "
-              "es una cota, no una factura.")
-    print(f"contexto por petición: medio {human(totals.ctx_sum // max(totals.requests, 1))}, "
-          f"máximo {human(totals.ctx_max)}")
-    print(f"reenvío total (suma de contexto): {totals.ctx_sum:,} tokens")
+        print(f"cost@cap: projection scaling cost by the ratio of the capped context "
+              f"({human(cap)}) to the real one. Assumes writes and output are unchanged; "
+              "an upper bound, not an invoice.")
+    print(f"context per request: mean {human(totals.ctx_sum // max(totals.requests, 1))}, "
+          f"max {human(totals.ctx_max)}")
+    print(f"total re-sent (sum of context): {totals.ctx_sum:,} tokens")
 
     if cost_state:
         declared = cost_state.get("totalCostUSD") or 0
-        print(f"cost-state declara ${declared:.2f}; este informe reconstruye ${totals.cost():.2f}")
+        print(f"cost-state declares ${declared:.2f}; this report reconstructs ${totals.cost():.2f}")
         delta = totals.cost() - declared
         pct = (delta / declared * 100) if declared else 0
-        print(f"diferencia: ${delta:+.2f} ({pct:+.1f}%). "
-              "Una diferencia que crece apunta a peticiones facturadas sin registro en el transcript.")
+        print(f"difference: ${delta:+.2f} ({pct:+.1f}%). "
+              "A growing difference points to billed requests with no record in the transcript.")
 
 
 def main() -> None:

@@ -1,38 +1,42 @@
 # AGENTS.md — claude
 
-Registro personal de uso y coste de Claude Code. El producto son los documentos,
-no el código: aquí no hay build ni tests, y una afirmación sin medición no vale.
+A personal record of Claude Code usage and cost. The product is the documents,
+not the code: there is no build and no test suite beyond the hook self-tests, and
+a claim without a measurement is not worth much.
 
-## Reglas
+## Rules
 
-- **Todo dato lleva su fuente.** Un número sale del `usage` de un transcript o del
-  `cost-state` de una sesión, y se dice cuál. Si es una estimación, se marca como
-  tal y se declara el supuesto.
-- **No se reescribe un documento fechado.** `docs/reviews/` y `docs/changes/` son
-  registros: si algo cambia, va un documento nuevo que enlaza al anterior.
-- **Frontmatter obligatorio** en todo lo que esté bajo `docs/`, salvo
-  `docs/README.md` y `docs/templates/`. Los enlaces son relativos.
-- **Los secretos no entran.** Ni API keys, ni rutas con credenciales, ni el
-  contenido de `~/.claude/.credentials.json`. Los IDs de sesión son locales y sí
-  pueden aparecer.
-- **No se empuja nada** (`git push`) salvo que el dueño lo pida.
+- **Every number carries its source.** A figure comes from a transcript's `usage`
+  or from a session's `cost-state`, and the document says which. Estimates are
+  labelled as estimates and their assumption is stated.
+- **A dated document is never rewritten.** `docs/reviews/` and `docs/changes/` are
+  records: when something changes, a new document links to the old one.
+- **Frontmatter is mandatory** for everything under `docs/`, except
+  `docs/README.md` and `docs/templates/`. Links are relative.
+- **No secrets.** No API keys, no paths holding credentials, no contents of
+  `~/.claude/.credentials.json`. Local session IDs are fine.
+- **Nothing is pushed** (`git push`) unless the owner asks.
 
-## Estructura
+## Layout
 
-- `docs/reviews/` — mediciones y auditorías, fechadas, inmutables.
-- `docs/plans/` — lo que se propone construir, con fases y criterios de salida.
-- `docs/templates/` — las plantillas de cada tipo.
+- `docs/reviews/` — measurements and audits, dated, immutable.
+- `docs/plans/` — what is proposed, with phases and exit criteria.
+- `docs/templates/` — the template for each type.
+- `hooks/`, `settings/`, `agents/`, `skills/` — what `task install` applies.
+- `scripts/` — the installer, the session audit and the hook self-tests.
 
-## Comprobación
+## Checks
 
 ```bash
-python3 ~/.config/rsk/cache/registry/docs-architect/1.0.0/scripts/docs_lint.py docs
+task lint   # bash -n on the hooks, py_compile on the scripts, jq on the JSON
+task test   # 13 hook cases in a throwaway CLAUDE_CONFIG_DIR
+task docs   # docs_lint.py over docs/
 ```
 
-## Versiones
+## Versions
 
-- Un release es un tag anotado y firmado `vX.Y.Z` sobre un commit limpio.
-- Cada release lleva su entrada en `CHANGELOG.md`. Un cambio que altera lo que
-  `task install` escribe, o lo que `task audit` reporta, la necesita.
-- Un tag publicado no se mueve: si está mal, se hace otro release.
-- `git push` y el push de tags siguen siendo del dueño.
+- A release is a signed, annotated `vX.Y.Z` tag on a clean commit.
+- Every release has its entry in `CHANGELOG.md`. A change that alters what
+  `task install` writes, or what `task audit` reports, needs one.
+- A published tag is never moved: if it is wrong, cut another release.
+- `git push` and pushing tags stay with the owner.

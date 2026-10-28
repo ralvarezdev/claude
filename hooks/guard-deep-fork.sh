@@ -35,9 +35,9 @@ jq -n --argjson ctx "$context" --argjson limit "$limit" '{
     hookEventName: "PreToolUse",
     permissionDecision: "deny",
     permissionDecisionReason:
-      ("Contexto en " + ($ctx | tostring) + " tokens (límite " + ($limit | tostring) + "). "
-       + "No forkear: un fork copia el historial y cada turno suyo reenvía esa copia. "
-       + "Usá un subagente con contexto fresco y un brief, o hacé /clear antes.")
+      ("Context is at " + ($ctx | tostring) + " tokens (limit " + ($limit | tostring) + "). "
+       + "Do not fork: a fork copies the history and every turn of it re-sends that copy. "
+       + "Use a fresh subagent with a brief, or /clear first.")
   }
 }'
 exit 0
