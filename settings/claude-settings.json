@@ -1,0 +1,14 @@
+{
+  "autoCompactWindow": 200000,
+  "promptCacheTtl": "1h",
+  "subagentPromptCacheTtl": "1h",
+  "env": {
+    "CLAUDE_CODE_FORK_SUBAGENT": "0"
+  },
+  "permissions": {
+    "deny": [
+      "Read(//tmp/claude-*/**)",
+      "Read(//tmp/**/*.output)"
+    ]
+  }
+}

@@ -1,0 +1,152 @@
+version: '3'
+
+# Applies the guardrails described in docs/plans/2026-10-28-claude-code-token-guardrails-plan.md
+# to the live Claude Code configuration. Every write to ~/.claude is backed up.
+#
+#   task check     report what is applied (read-only, exit 0)
+#   task verify    same check, exit 1 if anything is missing
+#   task install   apply settings, hooks, agent and skill
+#   task audit     audit one session's tokens and cost
+
+vars:
+  CLAUDE_DIR:
+    sh: echo "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+  AUDIT: '{{.TASKFILE_DIR}}/scripts/audit-session-cost.py'
+  APPLY: '{{.TASKFILE_DIR}}/scripts/apply-settings.py'
+  HOOKS: guard-deep-fork.sh guard-transcript-reads.sh guard-model-switch.sh guard-subagent-report.sh loop-concision.sh
+
+tasks:
+  default:
+    desc: List the tasks
+    silent: true
+    cmds:
+      - task --list
+
+  install:
+    desc: Apply settings, hooks, agent and skill to the live Claude Code config
+    cmds:
+      - task: install:settings
+      - task: install:hooks
+      - task: install:agent
+      - task: install:skill
+      - task: check
+
+  install:settings:
+    desc: Merge this repo's keys into the live settings.json (backs up first)
+    cmds:
+      - python3 {{.APPLY}}
+
+  install:dry:
+    desc: Print the merged settings.json without touching the live file
+    cmds:
+      - python3 {{.APPLY}} --dry-run
+
+  install:hooks:
+    desc: Install the five guard hooks as executables
+    cmds:
+      - |
+        set -eu
+        mkdir -p "{{.CLAUDE_DIR}}/hooks"
+        for hook in hooks/*.sh; do
+          install -m 0755 "$hook" "{{.CLAUDE_DIR}}/hooks/$(basename "$hook")"
+          echo "  ✓ $(basename "$hook")"
+        done
+
+  install:agent:
+    desc: Install the benchmark-runner subagent
+    cmds:
+      - |
+        set -eu
+        mkdir -p "{{.CLAUDE_DIR}}/agents"
+        install -m 0644 agents/benchmark-runner.md "{{.CLAUDE_DIR}}/agents/benchmark-runner.md"
+        echo "  ✓ benchmark-runner.md"
+
+  install:skill:
+    desc: Install the benchmark-monitor skill
+    cmds:
+      - |
+        set -eu
+        mkdir -p "{{.CLAUDE_DIR}}/skills"
+        rm -rf "{{.CLAUDE_DIR}}/skills/benchmark-monitor"
+        cp -R skills/benchmark-monitor "{{.CLAUDE_DIR}}/skills/benchmark-monitor"
+        echo "  ✓ benchmark-monitor"
+
+  check:
+    desc: Report the state of each guardrail (read-only)
+    silent: true
+    cmds:
+      - |
+        dir="{{.CLAUDE_DIR}}"
+        gaps=0
+        note() { printf '  %-6s %s\n' "$1" "$2"; }
+
+        if python3 {{.APPLY}} --check >/dev/null 2>&1; then note ok "settings.json"; else note MISS "settings.json"; gaps=$((gaps+1)); fi
+
+        for hook in {{.HOOKS}}; do
+          if [ -x "$dir/hooks/$hook" ] && cmp -s "hooks/$hook" "$dir/hooks/$hook"; then
+            note ok "$hook"
+          else
+            note MISS "$hook"; gaps=$((gaps+1))
+          fi
+        done
+
+        if cmp -s agents/benchmark-runner.md "$dir/agents/benchmark-runner.md" 2>/dev/null; then note ok "benchmark-runner"; else note MISS "benchmark-runner"; gaps=$((gaps+1)); fi
+        if cmp -s skills/benchmark-monitor/SKILL.md "$dir/skills/benchmark-monitor/SKILL.md" 2>/dev/null; then note ok "benchmark-monitor"; else note MISS "benchmark-monitor"; gaps=$((gaps+1)); fi
+
+        echo
+        if [ "$gaps" -eq 0 ]; then echo "todo aplicado"; else echo "$gaps pendientes — corré: task install"; fi
+
+  verify:
+    desc: Like check, but exits 1 when something is missing
+    silent: true
+    cmds:
+      - |
+        out=$(task --silent check)
+        echo "$out"
+        echo "$out" | grep -q "todo aplicado" || exit 1
+
+  uninstall:
+    desc: Remove the hooks, agent and skill (settings.json is left alone)
+    cmds:
+      - |
+        set -eu
+        for hook in {{.HOOKS}}; do rm -f "{{.CLAUDE_DIR}}/hooks/$hook"; done
+        rm -f "{{.CLAUDE_DIR}}/agents/benchmark-runner.md"
+        rm -rf "{{.CLAUDE_DIR}}/skills/benchmark-monitor"
+        echo "hooks, agent and skill removed"
+        echo "settings.json untouched — use 'task restore' to roll it back to the last backup"
+
+  restore:
+    desc: Restore the most recent settings.json backup
+    cmds:
+      - python3 {{.APPLY}} --restore
+
+  audit:
+    desc: 'Audit a session: task audit -- <session-id> [--cap 200000]'
+    cmds:
+      - python3 {{.AUDIT}} {{.CLI_ARGS}}
+
+  sessions:
+    desc: List the most recent sessions
+    cmds:
+      - python3 {{.AUDIT}} --list
+
+  test:
+    desc: Run the hook smoke tests (throwaway config dir, no side effects)
+    cmds:
+      - ./scripts/selftest.sh
+
+  lint:
+    desc: Syntax-check the hooks, scripts and JSON
+    cmds:
+      - |
+        set -eu
+        for hook in hooks/*.sh; do bash -n "$hook"; done
+        python3 -m py_compile scripts/audit-session-cost.py scripts/apply-settings.py
+        jq empty settings/claude-settings.json settings/claude-hooks.json
+        echo "ok"
+
+  docs:
+    desc: Lint the docs tree
+    cmds:
+      - python3 ~/.config/rsk/cache/registry/docs-architect/1.0.0/scripts/docs_lint.py docs

@@ -95,6 +95,12 @@ Cinco obligatorios, cuatro opcionales y una lista de descartados. Todos son
 `command` con `jq`: sin red y con `timeout` corto, porque `PreToolUse` corre en el
 camino crítico de cada llamada a herramienta (366 en la sesión auditada).
 
+Los scripts canónicos están en `hooks/*.sh` y los aplica `task install`; los
+fragmentos de abajo muestran la forma y la decisión de cada uno. La diferencia
+importa en un detalle: los scripts reales no usan `set -e`, porque un
+`(( condición )) && exit 0` que falla termina el hook con código 1 y Claude Code
+lo reporta como error de hook. Usan `if` explícito y cierran con `exit 0`.
+
 #### 3.3.1 `guard-deep-fork.sh` — bloquear forks con el padre profundo
 
 Por qué aquí y no en `SubagentStart`: ese evento **no puede bloquear** la creación

@@ -26,6 +26,29 @@ Todo sale de los transcripts que Claude Code escribe en
 `usage` real de la API y cada sesión cierra con un `cost-state` con el total. Los
 comandos de reproducción están en el §9 de la auditoría.
 
+## Configuración
+
+El repositorio no solo documenta: aplica. `Taskfile.yml` instala los guardrails en
+`~/.claude` de forma idempotente y con backup previo de `settings.json`.
+
+```bash
+task              # lista las tareas
+task check        # qué está aplicado y qué falta (solo lectura)
+task install      # settings + hooks + agente + skill
+task audit -- <sesión> [--cap 200000]
+task test         # pruebas de los hooks en un config dir desechable
+```
+
+| Pieza | Ruta en el repo | Destino |
+|---|---|---|
+| Settings | `settings/claude-{settings,hooks}.json` | `~/.claude/settings.json` (merge) |
+| Hooks | `hooks/*.sh` | `~/.claude/hooks/` |
+| Subagente | `agents/benchmark-runner.md` | `~/.claude/agents/` |
+| Skill | `skills/benchmark-monitor/` | `~/.claude/skills/` |
+
+`task restore` devuelve `settings.json` al último backup; `task uninstall` quita
+hooks, agente y skill y deja los settings intactos.
+
 ## Convenciones
 
 `docs/` sigue el esquema de `docs-architect`: una carpeta por tipo de documento,
