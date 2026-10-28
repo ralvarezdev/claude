@@ -100,25 +100,43 @@ got=$(printf '{"prompt":"fix the parser bug"}' | hooks/loop-concision.sh | injec
 expect "normal prompt: no injection" allow "$got"
 
 # --- context meter and checkpoints ---
+state="$CLAUDE_CONFIG_DIR/hooks/.state"
 printf '{"session_id":"m1","transcript_path":"%s"}' "$deep" | hooks/context-meter.sh
-got=$(cat "$CLAUDE_CONFIG_DIR/hooks/.state/context-m1" 2>/dev/null)
+read -r got delta out <"$state/context-m1"
 expect "meter records the context" 745001 "$got"
+expect "meter records the delta on the first turn" 745001 "$delta"
+
+printf '{"session_id":"m1","transcript_path":"%s"}' "$deep" | hooks/context-meter.sh
+read -r got delta out <"$state/context-m1"
+expect "meter records no delta when nothing grew" 0 "$delta"
 
 sid="s1"
 ckpt() { printf '{"session_id":"%s","tool_name":"Bash"}' "$1" | hooks/context-checkpoint.sh | decision; }
 
-echo 150000 >"$CLAUDE_CONFIG_DIR/hooks/.state/context-$sid"
+echo "150000 1600 900" >"$state/context-$sid"
 expect "context 150k: allows" allow "$(ckpt "$sid")"
 
-echo 250000 >"$CLAUDE_CONFIG_DIR/hooks/.state/context-$sid"
+echo "250000 1600 900" >"$state/context-$sid"
 expect "context 250k: asks" ask "$(ckpt "$sid")"
 
 expect "context 250k again: no second prompt" allow "$(ckpt "$sid")"
 
-echo 450000 >"$CLAUDE_CONFIG_DIR/hooks/.state/context-$sid"
+echo "450000 1600 900" >"$state/context-$sid"
 expect "context 450k: asks again" ask "$(ckpt "$sid")"
 
 expect "context 450k again: no second prompt" allow "$(ckpt "$sid")"
+
+echo "650000 1600 900" >"$state/context-$sid"
+expect "context 650k: asks at the 600k tier" ask "$(ckpt "$sid")"
+
+reason=$(printf '{"session_id":"s1","tool_name":"Bash"}' | hooks/context-checkpoint.sh >/dev/null; echo)
+echo "850000 1600 900" >"$state/context-$sid"
+reason=$(printf '{"session_id":"s1","tool_name":"Bash"}' | hooks/context-checkpoint.sh | jq -r '.hookSpecificOutput.permissionDecisionReason // empty')
+if [[ $reason == *'$0.'* ]]; then
+  expect "the prompt carries a per-turn cost" yes yes
+else
+  expect "the prompt carries a per-turn cost" "a dollar figure" "${reason:-<empty>}"
+fi
 
 expect "unknown session: allows" allow "$(printf '{"session_id":"nope"}' | hooks/context-checkpoint.sh | decision)"
 

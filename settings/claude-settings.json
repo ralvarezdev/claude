@@ -1,5 +1,5 @@
 {
-  "autoCompactWindow": 600000,
+  "autoCompactWindow": 1000000,
   "promptCacheTtl": "1h",
   "subagentPromptCacheTtl": "1h",
   "env": {

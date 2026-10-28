@@ -46,7 +46,7 @@ In `~/.claude/settings.json` (user scope: applies to every project).
 
 ```json
 {
-  "autoCompactWindow": 600000,
+  "autoCompactWindow": 1000000,
   "promptCacheTtl": "1h",
   "subagentPromptCacheTtl": "1h",
   "env": { "CLAUDE_CODE_FORK_SUBAGENT": "0" }
@@ -55,15 +55,15 @@ In `~/.claude/settings.json` (user scope: applies to every project).
 
 | Key | Effect | Cost of the change |
 |---|---|---|
-| `autoCompactWindow: 600000` | Compacts near 570k instead of 950k | A backstop, not the control: see §3.3.8 |
+| `autoCompactWindow: 1000000` | The model's own window is the ceiling | No cap in practice: the control is the checkpoint in §3.3.8 |
 | `promptCacheTtl: "1h"` | Pins the main thread's TTL at 1 hour | Writes at 2x instead of 1.25x; with 1.39M of writes per session, negligible |
 | `subagentPromptCacheTtl: "1h"` | Same for subagents, forks and compaction | Same; break-even on the second poll of a fork |
 | `CLAUDE_CODE_FORK_SUBAGENT: "0"` | Claude stops opening forks on its own | `/subtask` still opens them by hand |
 
 **The cap and the checkpoints are mutually exclusive controls.** A 200k cap holds
 the context at 200k, so a confirmation at 400k could never fire. This plan ships
-the checkpoint pair (§3.3.8) with a 600k backstop, so the context can grow where
-the work needs it at a cost the user approves turn by turn. If the priority is the
+the checkpoint pair (§3.3.8) with the full window, so the context can grow where
+the work needs it at a cost the user approves as it grows. If the priority is the
 lowest possible bill instead of control, set the cap to `200000` and drop the
 checkpoints: on the audited sessions that is ~$43 against $65 (an upper bound,
 because a lower cap also shrinks the forks' rewrites).
@@ -343,18 +343,35 @@ which is what makes a long context a decision instead of an accident.
   half and it runs once per turn, not once per tool call.
 - `context-checkpoint.sh` (`PreToolUse` on `Bash|Read|Write|Edit|Agent`) reads
   that small file and returns `permissionDecision: "ask"` the first time the
-  context crosses 200k, and again at 400k. The message carries the per-turn cost
-  at the cache-read price.
+  context crosses each threshold. Defaults are **200k, 400k, 600k and 800k**;
+  `CONTEXT_TIERS` overrides them.
+
+The per-turn figure in the prompt is computed, not guessed:
+
+```
+cost/turn = (context - delta) * read_price + delta * write_price + output * out_price
+```
+
+The first two terms are the cache hit and the new content. Checked against the
+two audited sessions it lands within **6%** of the observed cost per turn
+(−6% on openhands-plc, +1% on openevolve), because `delta` (1.6k–2.3k per turn)
+and `output` (0.9k–1.7k) are stable. What the formula cannot know is the cache
+state, so the message also shows the rebuild price, which is 40x higher.
+
+At Sonnet 5.5 prices: 200k → $0.03/turn, 400k → $0.05, 600k → $0.07, 800k →
+$0.09, against $0.81/1.61/2.41/3.21 for a rebuild at the same sizes.
 
 Cost on the hot path: a file read plus one process per tool call, a few
-milliseconds. The transcript parse stayed in the `Stop` hook. The user sees one
-prompt per threshold per session, not one per tool call.
+milliseconds. The transcript parse stayed in the `Stop` hook. The arithmetic only
+runs when a threshold is crossed. The user sees one prompt per threshold per
+session, not one per tool call.
 
 The marker is written **before** the answer is known, so a dismissal counts as
 answered. Without that, every tool call above the threshold would prompt again.
 
-Tested: 150k allows, 250k asks, 250k again does not, 450k asks again, unknown
-session allows, and the meter records the value the transcript reports.
+Tested: 150k allows, 250k asks, 250k again does not, 450k asks again, 650k asks
+at the 600k tier, the prompt carries a dollar figure, and the meter records both
+the context and the delta.
 
 ### 3.4 `benchmark-monitor` skill — priority 1
 

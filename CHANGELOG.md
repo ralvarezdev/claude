@@ -16,9 +16,14 @@ the tooling that applies it. Anything that changes what `task install` writes to
   confirmation once at 200k of context and again at 400k, instead of forcing a
   compaction. The meter parses the transcript once per turn and leaves the value
   in a state file, so the checkpoint only reads a file on the hot path.
-- `autoCompactWindow` raised from 200000 to 600000: it is now a backstop above
-  both thresholds. A 200k cap and a 400k confirmation are mutually exclusive —
-  whichever is lower wins — so the repository ships the confirmation path.
+- `autoCompactWindow` raised from 200000 to the model's full window: a cap and a
+  confirmation are mutually exclusive — whichever is lower wins — so the
+  repository ships the confirmation path. Thresholds are 200k, 400k, 600k and
+  800k, overridable with `CONTEXT_TIERS`.
+- The prompt carries a computed cost per turn, not a rough figure:
+  `(context - delta) * read + delta * write + output * out`. It lands within 6%
+  of the observed cost per turn on both audited sessions, and it also shows the
+  rebuild price, which is 40x higher, because the cache state is the one unknown.
 
 ### Fixed
 

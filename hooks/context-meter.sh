@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
 # Stop · no matcher
 #
-# Records the session's current context once per turn, so the checkpoint hook
-# never has to parse the transcript on every tool call. This is the expensive
-# half of the pair (it reads the tail of a file that can reach tens of megabytes)
-# and it runs once per turn instead of once per tool call.
+# Records three numbers once per turn, so the checkpoint hook never has to parse
+# the transcript on every tool call:
+#
+#   context  the tokens the next request will re-send
+#   delta    the new tokens this turn added (context minus the previous context)
+#   output   the output tokens of the last response
+#
+# delta and output are what make a per-turn cost estimate accurate: the context
+# is re-read at the cache price, but the new content is written at the write price
+# and the output at the output price.
 set -uo pipefail
 
 payload=$(cat)
@@ -12,19 +18,34 @@ session=$(jq -r '.session_id // empty' <<<"$payload" 2>/dev/null)
 transcript=$(jq -r '.transcript_path // empty' <<<"$payload" 2>/dev/null)
 [[ -n $session && -f ${transcript:-} ]] || exit 0
 
-context=$(tail -n 4000 "$transcript" 2>/dev/null \
+line=$(tail -n 4000 "$transcript" 2>/dev/null \
     | grep -F '"type":"assistant"' \
     | tail -n 20 \
     | tac \
     | jq -r 'select(.message.usage)
-        | .message.usage.input_tokens
-        + .message.usage.cache_read_input_tokens
-        + .message.usage.cache_creation_input_tokens' 2>/dev/null \
+        | [(.message.usage.input_tokens
+            + .message.usage.cache_read_input_tokens
+            + .message.usage.cache_creation_input_tokens),
+           (.message.usage.output_tokens // 0)] | @tsv' 2>/dev/null \
     | head -1)
 
-[[ $context =~ ^[0-9]+$ ]] || exit 0
+[[ -n $line ]] || exit 0
+context=${line%%$'\t'*}
+output=${line##*$'\t'}
+[[ $context =~ ^[0-9]+$ && $output =~ ^[0-9]+$ ]] || exit 0
 
 state="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/.state"
 mkdir -p "$state"
-printf '%s\n' "$context" >"$state/context-$session"
+file="$state/context-$session"
+
+previous=0
+if [[ -f $file ]]; then
+  previous=$(cut -d' ' -f1 "$file" 2>/dev/null)
+  [[ $previous =~ ^[0-9]+$ ]] || previous=0
+fi
+
+delta=$((context - previous))
+(( delta < 0 )) && delta=0
+
+printf '%s %s %s\n' "$context" "$delta" "$output" >"$file"
 exit 0
