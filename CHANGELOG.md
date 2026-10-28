@@ -10,6 +10,25 @@ the tooling that applies it. Anything that changes what `task install` writes to
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-28
+
+### Added
+
+- `cache-watch.sh` (`UserPromptSubmit`) catches an expired prompt cache before
+  the request goes out. Expiry is deterministic — `last turn + TTL` — so it is a
+  prediction, not a heuristic; it cannot see an early eviction, which is why the
+  figure says "about".
+
+  Above `CACHE_WATCH_BLOCK_USD` (default $0.50, roughly 125k of context at the 1h
+  write price) the prompt is **blocked**, because this hook runs before the
+  request but does not stop it: a message alone would let the rebuild be paid
+  anyway. Below the threshold it only warns.
+
+  Blocking costs nothing: the request never reaches the API. The marker is keyed
+  on the timestamp of the last turn, so one idle episode blocks once. Resending
+  goes through and accepts the rebuild, which is the point of the pause; `/clear`
+  is how to avoid the cost instead of accepting it.
+
 ### Fixed
 
 - The per-turn figures quoted in 0.3.0 used the 5-minute write price ($2.50/M).
@@ -17,19 +36,13 @@ the tooling that applies it. Anything that changes what `task install` writes to
   the numbers are one cent higher: 200k $0.04, 400k $0.06, 600k $0.08, 800k
   $0.10, with rebuilds at $1.01, $2.01, $3.01 and $4.01. The hook already used
   the 1h price; only the table was wrong.
+- The cache-watch entry had been written into the published 0.3.0 section, which
+  predates the feature. It lives here now.
 
 ## [0.3.0] - 2026-10-28
 
 ### Added
 
-- `cache-watch.sh` (`UserPromptSubmit`) catches an expired prompt cache before
-  the request goes out. Expiry is deterministic — `last turn + TTL` — so it is a
-  prediction, not a heuristic. Above `CACHE_WATCH_BLOCK_USD` (default $0.50) it
-  **blocks the prompt once** rather than only warning: this hook runs before the
-  request but does not stop it, so a message alone would let the rebuild be paid
-  anyway. Below the threshold it warns. Keyed on the last turn, so one idle
-  episode asks once and the resend goes through. It cannot see an early eviction,
-  which is why the figure says "about".
 - `context-meter.sh` (`Stop`) and `context-checkpoint.sh` (`PreToolUse`) ask for
   confirmation once at 200k of context and again at 400k, instead of forcing a
   compaction. The meter parses the transcript once per turn and leaves the value
