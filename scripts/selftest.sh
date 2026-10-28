@@ -51,13 +51,19 @@ injects() {
 deep=$(mktemp)
 printf '%s\n' '{"type":"assistant","message":{"id":"m1","usage":{"input_tokens":1,"cache_read_input_tokens":745000,"cache_creation_input_tokens":0}}}' >"$deep"
 
-got=$(printf '{"tool_name":"Agent","transcript_path":"%s"}' "$deep" | hooks/guard-deep-fork.sh | decision)
+got=$(printf '{"tool_name":"Agent","tool_input":{"subagent_type":"fork"},"transcript_path":"%s"}' "$deep" | hooks/guard-deep-fork.sh | decision)
 expect "fork at 745k: denies" deny "$got"
 
 shallow=$(mktemp)
 printf '%s\n' '{"type":"assistant","message":{"id":"m1","usage":{"input_tokens":1,"cache_read_input_tokens":40000,"cache_creation_input_tokens":0}}}' >"$shallow"
-got=$(printf '{"tool_name":"Agent","transcript_path":"%s"}' "$shallow" | hooks/guard-deep-fork.sh | decision)
+got=$(printf '{"tool_name":"Agent","tool_input":{"subagent_type":"fork"},"transcript_path":"%s"}' "$shallow" | hooks/guard-deep-fork.sh | decision)
 expect "fork at 40k: allows" allow "$got"
+
+got=$(printf '{"tool_name":"Agent","tool_input":{"subagent_type":"Explore"},"transcript_path":"%s"}' "$deep" | hooks/guard-deep-fork.sh | decision)
+expect "Explore at 745k: allows" allow "$got"
+
+got=$(printf '{"tool_name":"Agent","tool_input":{"subagent_type":"general-purpose"},"transcript_path":"%s"}' "$deep" | hooks/guard-deep-fork.sh | decision)
+expect "general-purpose at 745k: allows" allow "$got"
 
 got=$(printf '{"tool_name":"Read","tool_input":{"file_path":"/tmp/claude-1000/x/tasks/a1.output"}}' | hooks/guard-transcript-reads.sh | decision)
 expect "Read of a .output: denies" deny "$got"

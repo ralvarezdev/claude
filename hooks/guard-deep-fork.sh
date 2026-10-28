@@ -5,10 +5,18 @@
 # conversation, so with the parent at 700k every turn of the child re-sends 700k.
 # SubagentStart cannot block creation; this is the only place it can be done.
 #
+# Only forks are constrained: Explore, Plan, general-purpose and custom subagents
+# start with a fresh context, so they cost the same at any depth. A fork carries
+# the history; nothing else does.
+#
 # Exit 0 with no output means "no opinion": the normal permission flow applies.
 set -uo pipefail
 
 payload=$(cat)
+
+subagent=$(jq -r '.tool_input.subagent_type // empty' <<<"$payload" 2>/dev/null)
+[[ $subagent == "fork" ]] || exit 0
+
 transcript=$(jq -r '.transcript_path // empty' <<<"$payload" 2>/dev/null)
 [[ -z $transcript || ! -f $transcript ]] && exit 0
 

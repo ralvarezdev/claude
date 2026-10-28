@@ -10,6 +10,13 @@ the tooling that applies it. Anything that changes what `task install` writes to
 
 ## [Unreleased]
 
+### Fixed
+
+- `guard-deep-fork.sh` now denies only `subagent_type: "fork"`. It used to deny
+  every `Agent` call above the limit, which would also have blocked `Explore`,
+  `Plan` and fresh subagents at depth even though those start with a clean
+  context and cost the same there. Self-tests cover the four combinations.
+
 ### Changed
 
 - Translated the whole repository to English: the audit, the plan, the hook

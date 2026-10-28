@@ -110,6 +110,12 @@ creation. The only blocking point is `PreToolUse` on `Agent`.
 # Denies the fork when the session context already exceeds DEEP_FORK_LIMIT.
 set -uo pipefail
 input=$(cat)
+
+# Only forks inherit the conversation. Explore, Plan and fresh subagents start
+# with a clean context and cost the same at any depth.
+subagent=$(jq -r '.tool_input.subagent_type // empty' <<<"$input")
+[[ $subagent == "fork" ]] || exit 0
+
 transcript=$(jq -r '.transcript_path // empty' <<<"$input")
 [[ -z $transcript || ! -f $transcript ]] && exit 0
 
@@ -136,11 +142,12 @@ jq -n --argjson c "$ctx" --argjson l "$limit" '{
 exit 0
 ```
 
-Open item: the installed script denies **any** `Agent` call above the limit, which
-is the conservative version. In the audited transcripts a fork arrives as
-`"subagent_type": "fork"`, so the check can be narrowed to that value, letting
-`Explore`, `Plan` and fresh subagents through at any depth. Narrowing it is a
-behaviour change and therefore a release of its own.
+The check is narrowed to `subagent_type: "fork"`, the value the audited
+transcripts use for every fork (verified across the six). Anything else —
+`Explore`, `Plan`, `general-purpose`, a custom type — passes at any depth: those
+start with a fresh context, so blocking them would lose capability without
+saving anything. A call with no `subagent_type` passes too; Claude Code rejects
+that call on its own grounds.
 
 #### 3.3.2 `guard-transcript-reads.sh` — make the warning executable
 
