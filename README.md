@@ -18,6 +18,8 @@ measurement and the guardrails so it does not happen blind again.
 |---|---|
 | [Session cost audit](docs/reviews/2026-10-28-claude-code-session-token-audit.md) | What was measured, what was ruled out, and where every dollar came from |
 | [Guardrails plan](docs/plans/2026-10-28-claude-code-token-guardrails-plan.md) | Settings, hooks, skill, subagent and audit script, in phases |
+| [Backlog](docs/backlog/claude.md) | Open work: Doing, Next, Later, Someday |
+| [Changelog](CHANGELOG.md) | What each release changes in what `task install` writes or `task audit` reports |
 
 ## Method
 
@@ -37,7 +39,13 @@ task check        # what is applied and what is missing (read-only)
 task install      # settings + hooks + agent + skill
 task audit -- <session> [--cap 200000]
 task test         # hook tests in a throwaway config dir
+task lint         # bash -n on the hooks, py_compile on the scripts, jq on the JSON
+task docs         # frontmatter and link checks over docs/
 ```
+
+`task install` is idempotent: the `hooks` merge converges per event, replacing any
+group that runs one of our commands and keeping foreign groups, so re-installing
+after editing a hook updates it instead of stacking a second copy.
 
 | Piece | Path in the repo | Destination |
 |---|---|---|
@@ -46,8 +54,31 @@ task test         # hook tests in a throwaway config dir
 | Subagent | `agents/benchmark-runner.md` | `~/.claude/agents/` |
 | Skill | `skills/benchmark-monitor/` | `~/.claude/skills/` |
 
+### Hooks
+
+| Hook | Event | What it does |
+|---|---|---|
+| `loop-concision.sh` | `UserPromptSubmit` | Keeps replies short on polls and automated reports |
+| `cache-watch.sh` | `UserPromptSubmit` | Predicts an expired prompt cache (`last turn + TTL`); warns, and blocks the prompt above `CACHE_WATCH_BLOCK_USD` (default $0.50). Resending accepts the rebuild; `/clear` avoids it |
+| `context-checkpoint.sh` | `PreToolUse` | Asks for confirmation once per threshold (200k, 400k, 600k, 800k; `CONTEXT_TIERS`) |
+| `context-meter.sh` | `Stop` | Records the context numbers once per turn so the checkpoint never parses the transcript |
+| `guard-deep-fork.sh` | `PreToolUse` | Denies a `fork` subagent when the session context is already deep |
+| `guard-transcript-reads.sh` | `PreToolUse` | Stops reading raw task and session transcripts into the context |
+| `guard-subagent-report.sh` | `SubagentStop` | Keeps a subagent's final report from dumping logs into the parent |
+| `guard-model-switch.sh` | `PreModelSwitch` | Guards a model switch, which discards the prompt cache |
+
+The decision to block or ask is only proven to reach the permission system in
+headless mode; how an ACP client such as Zed draws it is still open (see the
+backlog).
+
 `task restore` rolls `settings.json` back to the last backup; `task uninstall`
 removes the hooks, agent and skill and leaves the settings alone.
+
+## Versions
+
+Releases are signed, annotated `vX.Y.Z` tags on a clean commit, each with its
+entry in [`CHANGELOG.md`](CHANGELOG.md). A published tag is never moved: a wrong
+release is followed by another one. Current: `v0.4.1`.
 
 ## Conventions
 
